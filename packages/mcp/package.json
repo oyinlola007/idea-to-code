@@ -1,0 +1,23 @@
+{
+  "name": "@idea-to-code/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server for idea-to-code plans, published as idea-to-code-mcp.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "idea-to-code-mcp": "./dist/main.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "node esbuild.mjs"
+  },
+  "dependencies": {
+    "@idea-to-code/core": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "idea-to-code",
+  "private": true,
+  "type": "module",
+  "description": "Plan software as nested flowcharts, with any coding agent, inside VS Code.",
+  "license": "MIT",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "pnpm -r --parallel run typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "pnpm -r run build",
+    "validate-plan": "pnpm --filter @idea-to-code/core run validate-plan"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.5",
+    "@types/vscode": "1.90.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0",
+    "vitest": "5.0.5"
+  },
+  "dependencies": {
+    "@idea-to-code/core": "workspace:*"
+  }
+}

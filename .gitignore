@@ -13,3 +13,9 @@ spikes/extension-runtime/*.vsix
 spikes/format/fixtures/career-app/
 spikes/format/fixtures/conversations/
 spikes/format/test/__snapshots__/
+
+# Workspace build outputs
+packages/*/dist/
+packages/*/out/
+*.tsbuildinfo
+*.vsix

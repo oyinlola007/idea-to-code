@@ -1,0 +1,55 @@
+# Pickup and return as a system design: components and what flows between them.
+feature: handover
+flows:
+  main:
+    label: Pickup and return
+    description: The borrower scans the tool's code at pickup and at return.
+    nodes:
+      - id: member-app
+        type: component
+        label: Member app
+        kind: client
+        tech: Mobile web
+        status: done
+      - id: handover-api
+        type: component
+        label: Handover API
+        kind: server
+        tech: Node.js
+        status: done
+      - id: handover-events
+        type: component
+        label: Handover events
+        kind: queue
+        tech: In-process queue
+        status: todo
+      - id: late-checker
+        type: component
+        label: Late-return checker
+        kind: worker
+        tech: Nightly job
+        status: todo
+      - id: store-trust
+        type: reference
+        label: Save trust score
+        ref: app-db
+      - id: send-sms
+        type: reference
+        label: Text the borrower
+        ref: sms-service
+    edges:
+      - from: member-app
+        to: handover-api
+        data: scanned tool code
+      - from: handover-api
+        to: handover-events
+        data: pickup or return event
+      - from: handover-events
+        to: late-checker
+        data: due dates
+      - from: late-checker
+        to: store-trust
+        data: late return
+      - from: late-checker
+        to: send-sms
+        data: overdue notice
