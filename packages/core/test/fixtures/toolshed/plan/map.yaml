@@ -1,0 +1,62 @@
+# Toolshed: a fictitious app used as the test fixture. Neighbours lend each
+# other tools instead of buying them.
+project: Toolshed
+description: Borrow tools from neighbours instead of buying them.
+
+features:
+  - id: members
+    label: Members and trust
+    description: Sign-up, profiles and a trust score built from past returns.
+  - id: catalogue
+    label: Tool catalogue
+    description: Tools members offer, with photos, condition and availability.
+  - id: bookings
+    label: Bookings
+    description: Pick a tool and dates, pay a deposit, get a confirmed booking.
+  - id: handover
+    label: Pickup and return
+    description: Handing the tool over and back, and spotting late returns.
+  - id: reminders
+    label: Reminders
+    description: Text messages before pickup and before the return date.
+
+# Shared building blocks several features use.
+components:
+  - id: app-db
+    label: App database
+    kind: database
+    tech: PostgreSQL
+    status: done
+  - id: payments-api
+    label: Payments API
+    kind: external-api
+    tech: Stripe
+  - id: sms-service
+    label: SMS service
+    kind: external-api
+    tech: Twilio
+
+# Members feed bookings, bookings feed handover, and a late return feeds back
+# into members (trust): a loop, which is fine between features.
+connections:
+  - from: members
+    to: bookings
+    data: trust score
+  - from: catalogue
+    to: bookings
+    data: tool availability
+  - from: bookings
+    to: handover
+    data: confirmed booking
+  - from: handover
+    to: members
+    data: late return
+  - from: bookings
+    to: reminders
+    data: pickup date
+  - from: reminders
+    to: sms-service
+    data: reminder text
+  - from: bookings
+    to: payments-api
+    data: deposit request

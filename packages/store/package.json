@@ -1,0 +1,16 @@
+{
+  "name": "@idea-to-code/store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "History store (content-addressed snapshots, sessions) and ProjectService.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@idea-to-code/core": "workspace:*"
+  }
+}

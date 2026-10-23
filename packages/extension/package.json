@@ -1,0 +1,32 @@
+{
+  "name": "idea-to-code",
+  "displayName": "idea-to-code",
+  "description": "Plan software as nested flowcharts, with any coding agent.",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "publisher": "idea-to-code",
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {},
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "node esbuild.mjs"
+  },
+  "dependencies": {
+    "@idea-to-code/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.90.0",
+    "esbuild": "0.28.2"
+  }
+}

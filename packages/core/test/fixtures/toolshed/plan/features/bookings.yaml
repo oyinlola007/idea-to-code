@@ -1,0 +1,141 @@
+# Bookings, three levels deep: main -> place booking -> take deposit.
+feature: bookings
+flows:
+  main:
+    label: Bookings
+    nodes:
+      - id: bookings-start
+        type: start
+      - id: browse-tools
+        type: step
+        label: Browse tools nearby
+        status: done
+      - id: pick-dates
+        type: step
+        label: Pick dates
+        status: done
+      - id: tool-available
+        type: decision
+        label: Tool available?
+      - id: place-booking
+        type: step
+        label: Place booking
+        description: Hold the tool, take a deposit, confirm.
+        expands: place-booking-flow
+      - id: join-waitlist
+        type: step
+        label: Join the waitlist
+        status: todo
+      - id: bookings-end
+        type: end
+        label: Booked
+      - id: waitlist-end
+        type: end
+        label: On the waitlist
+    edges:
+      - from: bookings-start
+        to: browse-tools
+      - from: browse-tools
+        to: pick-dates
+        data: chosen tool
+      - from: pick-dates
+        to: tool-available
+        data: date range
+      - from: tool-available
+        to: place-booking
+        label: "yes"
+      - from: tool-available
+        to: join-waitlist
+        label: "no"
+      - from: place-booking
+        to: bookings-end
+        data: confirmed booking
+      - from: join-waitlist
+        to: waitlist-end
+
+  place-booking-flow:
+    label: Place booking
+    nodes:
+      - id: place-booking-start
+        type: start
+      - id: hold-tool
+        type: step
+        label: Hold the tool for the dates
+        status: done
+      - id: take-deposit
+        type: step
+        label: Take deposit
+        expands: take-deposit-flow
+      - id: confirm-booking
+        type: step
+        label: Confirm booking
+        status: in_progress
+      - id: notify-member
+        type: reference
+        label: Remind the borrower
+        ref: reminders
+      - id: place-booking-end
+        type: end
+    edges:
+      - from: place-booking-start
+        to: hold-tool
+      - from: hold-tool
+        to: take-deposit
+        data: hold id
+      - from: take-deposit
+        to: confirm-booking
+        data: deposit receipt
+      - from: confirm-booking
+        to: notify-member
+        data: pickup date
+      - from: notify-member
+        to: place-booking-end
+
+  take-deposit-flow:
+    label: Take deposit
+    nodes:
+      - id: take-deposit-start
+        type: start
+      - id: create-payment
+        type: step
+        label: Create payment request
+        status: done
+      - id: payments
+        type: reference
+        label: Payments API
+        ref: payments-api
+      - id: deposit-paid
+        type: decision
+        label: Deposit paid?
+      - id: record-deposit
+        type: step
+        label: Record the deposit
+        status: todo
+      - id: release-hold
+        type: step
+        label: Release the hold
+        status: todo
+      - id: take-deposit-end
+        type: end
+      - id: released-end
+        type: end
+        label: Released
+    edges:
+      - from: take-deposit-start
+        to: create-payment
+      - from: create-payment
+        to: payments
+        data: amount + booking id
+      - from: payments
+        to: deposit-paid
+        data: payment result
+      - from: deposit-paid
+        to: record-deposit
+        label: "yes"
+      - from: deposit-paid
+        to: release-hold
+        label: "no"
+      - from: record-deposit
+        to: take-deposit-end
+      - from: release-hold
+        to: released-end

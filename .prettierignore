@@ -1,0 +1,8 @@
+spikes/
+docs/
+.claude/
+pnpm-lock.yaml
+**/dist/
+**/out/
+packages/core/schema/*.json
+packages/core/test/fixtures/
