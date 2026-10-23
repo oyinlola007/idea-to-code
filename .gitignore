@@ -1,0 +1,7 @@
+# Planning docs (local only)
+docs/
+
+# Dependencies and spike outputs
+node_modules/
+spikes/format/.env
+spikes/format/out/
