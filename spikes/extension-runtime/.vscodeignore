@@ -1,0 +1,11 @@
+**
+!out/extension.cjs
+!out/webview/main.js
+!out/webview/webview.js
+!out/webview/style.css
+!out/webview/elk.bundled.js
+!out/webview/elk-worker.min.js
+!out/webview/codicon.ttf
+!media/**
+!package.json
+!README.md

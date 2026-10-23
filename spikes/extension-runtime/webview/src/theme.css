@@ -1,0 +1,906 @@
+/* The chart's look, derived only from the VS Code theme (--vscode-*), so it
+   follows light, dark and high-contrast themes. Sizes here must match
+   layout/metrics.ts: cards are laid out before they're drawn. */
+
+:root {
+  --itc-font: var(--vscode-font-family, system-ui, sans-serif);
+  --itc-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+  --itc-fg: var(--vscode-editor-foreground);
+  --itc-muted: var(--vscode-descriptionForeground);
+  --itc-accent: var(--vscode-focusBorder);
+  --itc-link: var(--vscode-textLink-foreground);
+  --itc-done: var(--vscode-charts-green);
+  --itc-doing: var(--vscode-charts-yellow);
+  --itc-todo: var(--vscode-descriptionForeground);
+
+  --itc-canvas: var(--vscode-editor-background);
+  --itc-card: var(--vscode-editorWidget-background);
+  --itc-chip: var(--vscode-badge-background);
+  --itc-border: var(--vscode-widget-border, var(--vscode-editorWidget-border));
+  --itc-border-strong: var(--vscode-editorWidget-border, var(--vscode-widget-border));
+  --itc-edge: var(--vscode-editorLineNumber-foreground);
+  --itc-hover: var(--vscode-toolbar-hoverBackground);
+  --itc-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --itc-shadow-raised: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --itc-panel-shadow: 0 8px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
+
+  --itc-radius: 8px;
+  --itc-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Elevation differs by theme: in dark themes raised surfaces are lighter than
+   the canvas; in light themes the canvas is the tinted layer. */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  :root {
+    --itc-border: color-mix(in srgb, var(--vscode-editor-foreground) 13%, var(--vscode-editor-background));
+    --itc-border-strong: color-mix(in srgb, var(--vscode-editor-foreground) 26%, var(--vscode-editor-background));
+    --itc-edge: color-mix(in srgb, var(--vscode-editor-foreground) 34%, var(--vscode-editor-background));
+  }
+  body.vscode-dark {
+    --itc-canvas: var(--vscode-editor-background);
+    --itc-card: color-mix(in srgb, var(--vscode-editor-foreground) 5.5%, var(--vscode-editor-background));
+    --itc-chip: color-mix(in srgb, var(--vscode-editor-foreground) 9%, var(--vscode-editor-background));
+    --itc-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --itc-shadow-raised: 0 4px 14px rgba(0, 0, 0, 0.45);
+  }
+  body.vscode-light {
+    --itc-canvas: color-mix(in srgb, var(--vscode-editor-foreground) 3.5%, var(--vscode-editor-background));
+    --itc-card: var(--vscode-editor-background);
+    --itc-chip: color-mix(in srgb, var(--vscode-editor-foreground) 7%, var(--vscode-editor-background));
+    --itc-shadow: 0 1px 2px rgba(15, 20, 30, 0.06), 0 1px 1px rgba(15, 20, 30, 0.04);
+    --itc-shadow-raised: 0 4px 14px rgba(15, 20, 30, 0.1);
+  }
+}
+
+/* High contrast: borders carry everything, no shadows, no tints. */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --itc-canvas: var(--vscode-editor-background);
+  --itc-card: var(--vscode-editor-background);
+  --itc-chip: var(--vscode-editor-background);
+  --itc-border: var(--vscode-contrastBorder);
+  --itc-border-strong: var(--vscode-contrastBorder);
+  --itc-edge: var(--vscode-editor-foreground);
+  --itc-accent: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+  --itc-shadow: none;
+  --itc-shadow-raised: none;
+  --itc-panel-shadow: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--itc-canvas);
+  color: var(--itc-fg);
+  font-family: var(--itc-font);
+  font-size: 13px;
+  line-height: 18px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 1px solid var(--itc-accent);
+  outline-offset: 1px;
+}
+
+.codicon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ---------- App shell ---------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px;
+  flex: none;
+  background: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--itc-border);
+}
+
+.toolbar__history {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--itc-fg));
+  cursor: pointer;
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--itc-hover);
+}
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+body.vscode-high-contrast .icon-button:hover:not(:disabled),
+body.vscode-high-contrast-light .icon-button:hover:not(:disabled) {
+  border: 1px dashed var(--vscode-contrastActiveBorder);
+}
+
+.crumbs {
+  flex: 1;
+  min-width: 0;
+}
+.crumbs ol {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.crumbs li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.crumbs li:last-child {
+  flex-shrink: 0;
+  max-width: 60%;
+}
+.crumbs__sep {
+  font-size: 12px;
+  color: var(--itc-muted);
+  margin: 0 2px;
+  opacity: 0.7;
+}
+.crumbs__link,
+.crumbs__current,
+.crumbs__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.crumbs__link {
+  color: var(--itc-muted);
+  cursor: pointer;
+}
+.crumbs__link:hover {
+  color: var(--itc-fg);
+  background: var(--itc-hover);
+}
+.crumbs__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crumbs__current {
+  font-weight: 600;
+  display: block;
+}
+.crumbs__current .codicon {
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+.crumbs__more {
+  color: var(--itc-muted);
+}
+
+.toolbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  font-size: 12px;
+  color: var(--itc-muted);
+}
+.depth {
+  padding: 1px 7px;
+  border: 1px solid var(--itc-border);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.toolbar__progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.level-description {
+  margin: 0;
+  padding: 8px 16px 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--itc-muted);
+  max-width: 760px;
+}
+
+.issues {
+  margin: 8px 12px 0;
+  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--itc-border));
+  background: var(--vscode-inputValidation-warningBackground, var(--itc-card));
+  border-radius: 6px;
+  font-size: 12px;
+}
+.issues__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.issues__summary .codicon:last-child {
+  margin-left: auto;
+}
+.issues ul {
+  margin: 0;
+  padding: 0 10px 8px;
+  list-style: none;
+}
+.issues__item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 3px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.issues__item:hover {
+  text-decoration: underline;
+}
+.issues__where {
+  font-family: var(--itc-mono);
+  color: var(--itc-muted);
+  flex: none;
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  height: 100%;
+  color: var(--itc-muted);
+}
+.state p {
+  margin: 0;
+}
+.state--error .codicon {
+  font-size: 22px;
+  color: var(--vscode-errorForeground);
+}
+.state__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--itc-border);
+  border-top-color: var(--itc-accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Canvas and transitions ---------- */
+
+.chart {
+  position: absolute;
+  inset: 0;
+}
+.chart .react-flow {
+  background: var(--itc-canvas);
+  transition: opacity 280ms var(--itc-ease);
+}
+.chart--entering .react-flow {
+  opacity: 0;
+  transition: none;
+}
+.chart--leaving .react-flow {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+}
+.edge-markers {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--itc-muted);
+  pointer-events: none;
+}
+.empty .codicon {
+  font-size: 22px;
+  opacity: 0.6;
+}
+.empty p {
+  margin: 0;
+}
+
+.react-flow__node {
+  cursor: pointer;
+}
+.react-flow__node:focus-visible {
+  outline: none;
+}
+.react-flow__node:focus-visible .card {
+  outline: 2px solid var(--itc-accent);
+  outline-offset: 2px;
+}
+.handle {
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 11px 13px; /* + 1px border = metrics padX/padY */
+  border: 1px solid var(--itc-border);
+  border-radius: var(--itc-radius);
+  background: var(--itc-card);
+  box-shadow: var(--itc-shadow);
+  transition:
+    border-color 120ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+.react-flow__node:hover .card {
+  border-color: var(--itc-border-strong);
+  box-shadow: var(--itc-shadow-raised);
+}
+.card.is-selected {
+  border-color: var(--itc-accent);
+  box-shadow:
+    0 0 0 1px var(--itc-accent),
+    var(--itc-shadow-raised);
+}
+.card.is-dimmed > * {
+  opacity: 0.4;
+}
+.card.is-dimmed {
+  border-color: var(--itc-border);
+  box-shadow: none;
+}
+.card.is-arrived {
+  animation: arrived 1.4s var(--itc-ease);
+}
+@keyframes arrived {
+  0%,
+  40% {
+    box-shadow:
+      0 0 0 3px var(--itc-accent),
+      var(--itc-shadow-raised);
+  }
+  100% {
+    box-shadow: var(--itc-shadow);
+  }
+}
+
+/* Expandable: a second and third sheet behind the card. */
+.card--expandable {
+  box-shadow:
+    0 4px 0 -2px var(--itc-card),
+    0 4px 0 -1px var(--itc-border),
+    0 8px 0 -4px var(--itc-card),
+    0 8px 0 -3px var(--itc-border),
+    var(--itc-shadow);
+}
+.react-flow__node:hover .card--expandable {
+  box-shadow:
+    0 4px 0 -2px var(--itc-card),
+    0 4px 0 -1px var(--itc-border-strong),
+    0 8px 0 -4px var(--itc-card),
+    0 8px 0 -3px var(--itc-border-strong),
+    var(--itc-shadow-raised);
+}
+.card--expandable.is-selected {
+  box-shadow:
+    0 0 0 1px var(--itc-accent),
+    0 5px 0 -1px var(--itc-card),
+    0 5px 0 0 var(--itc-border-strong),
+    0 9px 0 -3px var(--itc-card),
+    0 9px 0 -2px var(--itc-border-strong);
+}
+
+.card--planned,
+.card--reference {
+  border-style: dashed;
+  box-shadow: none;
+}
+.card--planned {
+  background: transparent;
+}
+.card--planned .card__title,
+.card--planned .card__body {
+  color: var(--itc-muted);
+}
+
+.card__kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 16px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--itc-muted);
+}
+
+.card__title-row {
+  display: flex;
+  align-items: flex-start;
+}
+.card__title {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 0;
+}
+.card__title--feature {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.card__body {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--itc-muted);
+  white-space: nowrap;
+}
+
+.decision-mark {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin: 4.5px 13px 0 2px;
+  border: 1.5px solid var(--itc-muted);
+  transform: rotate(45deg);
+  border-radius: 1.5px;
+}
+
+.card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 16px;
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--itc-muted);
+}
+.meta__main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.meta__ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta__ref .codicon {
+  font-size: 13px;
+}
+.meta__ref--link {
+  color: var(--itc-link);
+}
+
+.chip {
+  flex: none;
+  max-width: 120px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--itc-chip);
+  font-size: 11px;
+  line-height: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chip--mono {
+  font-family: var(--itc-mono);
+  font-weight: 400;
+  color: var(--itc-fg);
+}
+body.vscode-high-contrast .chip,
+body.vscode-high-contrast-light .chip {
+  border: 1px solid var(--vscode-contrastBorder);
+  line-height: 14px;
+}
+
+.card__open {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: -3px -6px -3px 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--itc-muted);
+  cursor: pointer;
+}
+.card__open:hover {
+  color: var(--itc-fg);
+  background: var(--itc-hover);
+}
+.react-flow__node:hover .card__open,
+.card.is-selected .card__open {
+  color: var(--itc-accent);
+}
+
+/* Status: shape as well as colour. */
+.status-mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--itc-todo);
+}
+.status-mark--in_progress {
+  border-color: var(--itc-doing);
+  background: linear-gradient(90deg, var(--itc-doing) 50%, transparent 50%);
+}
+.status-mark--done {
+  border-color: var(--itc-done);
+  background: var(--itc-done);
+}
+.card--done .meta__main {
+  color: var(--itc-fg);
+}
+
+.ring__track {
+  stroke: var(--itc-border-strong);
+}
+.ring__value {
+  stroke: var(--itc-done);
+}
+body.vscode-high-contrast .ring__track,
+body.vscode-high-contrast-light .ring__track {
+  stroke-opacity: 0.45;
+  stroke-dasharray: 2 2;
+}
+.ring--complete .ring__track {
+  stroke: var(--itc-done);
+}
+
+/* Start / end pills. */
+.pill {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+  border-radius: 999px;
+}
+.pill__dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.pill__dot--start::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--itc-muted);
+}
+.pill__dot--end {
+  border: 1.5px solid var(--itc-muted);
+}
+.pill__dot--end::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--itc-muted);
+}
+.pill__label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---------- Edges ---------- */
+
+.react-flow__edge-path.edge {
+  stroke: var(--itc-edge);
+  stroke-width: 1.4;
+  fill: none;
+  transition:
+    stroke 120ms ease,
+    opacity 160ms ease;
+}
+.react-flow__edge-path.edge--active {
+  stroke: var(--itc-accent);
+  stroke-width: 1.8;
+}
+.react-flow__edge-path.edge--dim {
+  opacity: 0.25;
+}
+.edge-arrow {
+  stroke: var(--itc-edge);
+}
+.edge-arrow--active {
+  stroke: var(--itc-accent);
+}
+.edge-arrow--dim {
+  opacity: 0.25;
+}
+
+.edge-label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+  transition: opacity 160ms ease;
+}
+.edge-label--dim .edge-label__branch,
+.edge-label--dim .edge-label__data {
+  color: var(--itc-border-strong);
+  border-color: var(--itc-border);
+}
+.edge-label__branch,
+.edge-label__data {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  max-width: 100%;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.edge-label__branch {
+  border: 1px solid var(--itc-border-strong);
+  background: var(--itc-canvas);
+  font-weight: 600;
+  color: var(--itc-fg);
+}
+.edge-label__data {
+  gap: 5px;
+  border: 1px solid var(--itc-border);
+  border-radius: 5px;
+  background: var(--itc-canvas);
+  font-family: var(--itc-mono);
+  color: var(--itc-muted);
+}
+.edge-label__data .codicon {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.edge-label--active .edge-label__data,
+.edge-label--active .edge-label__branch {
+  border-color: var(--itc-accent);
+  color: var(--itc-fg);
+}
+
+/* ---------- Details panel ---------- */
+
+.details {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 320px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding: 12px 16px 16px;
+  border: 1px solid var(--itc-border);
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, var(--itc-card));
+  box-shadow: var(--itc-panel-shadow);
+  animation: panel-in 180ms var(--itc-ease);
+  z-index: 10;
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+.details__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.details__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--itc-muted);
+}
+.details__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 21px;
+  font-weight: 600;
+}
+.details__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fact--muted {
+  color: var(--itc-muted);
+}
+.details__description {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 19px;
+  white-space: pre-wrap;
+}
+.details__description--empty {
+  color: var(--itc-muted);
+}
+.details__flows h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--itc-muted);
+}
+.details__flows ul {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.details__flows li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--itc-border);
+  font-size: 12px;
+}
+.flow-peer {
+  font-weight: 500;
+}
+.flow-data {
+  flex-basis: 100%;
+  font-family: var(--itc-mono);
+  font-size: 11px;
+  color: var(--itc-muted);
+}
+.details__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.button--primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+.button--primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+.button--secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+.button--secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

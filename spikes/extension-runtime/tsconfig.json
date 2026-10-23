@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node", "vscode"]
+  },
+  "include": ["src/host", "src/store", "src/shared", "scripts", "test", "../format/src", "vitest.config.ts"]
+}

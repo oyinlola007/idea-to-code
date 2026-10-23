@@ -1,0 +1,163 @@
+{
+  "name": "idea-to-code-spike",
+  "displayName": "idea-to-code (spike)",
+  "description": "ITC-3 spike: extension runtime and an interactive chart prototype of a plan.",
+  "publisher": "idea-to-code",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./out/extension.cjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "activationEvents": [
+    "workspaceContains:plan/map.yaml"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ideaToCode",
+          "title": "idea-to-code",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "ideaToCode": [
+        {
+          "id": "ideaToCode.features",
+          "name": "Plan"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ideaToCode.features",
+        "contents": "No plan found. Open a folder that contains plan/map.yaml, or set ideaToCode.spike.planRoot."
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "ideaToCode.planEditor",
+        "displayName": "Plan chart",
+        "selector": [
+          {
+            "filenamePattern": "**/plan/**/*.yaml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ideaToCode.openPlan",
+        "title": "Open Plan",
+        "category": "idea-to-code",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "ideaToCode.openPreviewToSide",
+        "title": "Open Chart to the Side",
+        "category": "idea-to-code",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "ideaToCode.showSource",
+        "title": "Show YAML",
+        "category": "idea-to-code",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "ideaToCode.spike.runtimeReport",
+        "title": "Spike: Runtime Report",
+        "category": "idea-to-code"
+      },
+      {
+        "command": "ideaToCode.spike.storeStress",
+        "title": "Spike: Store Stress Test",
+        "category": "idea-to-code"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "ideaToCode.openPreviewToSide",
+          "when": "resourceExtname == .yaml && resourcePath =~ /[\\\\/]plan[\\\\/]/ && activeCustomEditorId != ideaToCode.planEditor",
+          "group": "navigation"
+        },
+        {
+          "command": "ideaToCode.showSource",
+          "when": "activeCustomEditorId == ideaToCode.planEditor",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "ideaToCode.openPlan",
+          "when": "view == ideaToCode.features",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "idea-to-code (spike)",
+      "properties": {
+        "ideaToCode.spike.planRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Folder containing plan/map.yaml. Empty: the first workspace folder that has one."
+        },
+        "ideaToCode.spike.workerMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "blob",
+            "url",
+            "main"
+          ],
+          "default": "auto",
+          "description": "How the webview runs ELK: blob-URL worker, extension-local URL worker, or on the main thread. Auto tries them in that order."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build:host": "node esbuild.mjs",
+    "build:webview": "vite build",
+    "build": "npm run build:host && npm run build:webview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.webview.json",
+    "test": "vitest run",
+    "store:stress": "tsx scripts/store-stress.ts",
+    "test:ext": "npm run build && tsx scripts/run-ext-tests.ts",
+    "screenshots": "npm run build && tsx scripts/screenshots.ts",
+    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository --skip-license -o out/idea-to-code-spike.vsix"
+  },
+  "dependencies": {
+    "@vscode/codicons": "0.0.46-24",
+    "@xyflow/react": "12.12.0",
+    "elkjs": "0.12.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/vscode": "1.90.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "playwright": "1.64.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
