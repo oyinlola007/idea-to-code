@@ -56,6 +56,8 @@ async function runOne(label: string, target: Target, scenario: string): Promise<
   try {
     await runTests({
       ...(target.executable ? { vscodeExecutablePath: target.executable } : { version: target.version ?? 'stable' }),
+      // Outside the extension: a copy of VS Code inside the folder it develops changes how that window behaves.
+      cachePath: join(ROOT, '..', '..', '.vscode-test'),
       extensionDevelopmentPath: ROOT,
       extensionTestsPath: SUITE,
       launchArgs: [

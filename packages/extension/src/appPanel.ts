@@ -18,6 +18,10 @@ export class AppPanel {
 
   private attach(panel: vscode.WebviewPanel): void {
     this.panel = panel;
+    panel.iconPath = {
+      light: vscode.Uri.joinPath(this.context.extensionUri, 'media', 'tab-light.svg'),
+      dark: vscode.Uri.joinPath(this.context.extensionUri, 'media', 'tab-dark.svg'),
+    };
     panel.webview.options = webviewOptions(this.context.extensionUri);
     const connection = connectWebview(panel.webview, this.host, this.events, this.log);
     panel.webview.html = webviewHtml(panel.webview, this.context.extensionUri);

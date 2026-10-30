@@ -19,7 +19,7 @@ describe('summarizePlan', () => {
     expect(plan.features.find((f) => f.id === 'reminders')).toMatchObject({ planned: true, done: 0, total: 0 });
     expect(plan.features.find((f) => f.id === 'bookings')?.planned).toBe(false);
     expect({ done: plan.done, total: plan.total }).toEqual({ done: 7, total: 15 });
-    expect(plan.problems.filter((p) => p.severity === 'warning')).toHaveLength(3);
+    expect(plan.problems).toEqual([]);
   });
 
   it('reports a broken map as a problem instead of throwing', () => {

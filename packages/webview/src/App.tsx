@@ -30,7 +30,7 @@ function Plan({ plan, folder, trusted }: { plan: PlanSummary; folder: string; tr
     <>
       <header>
         <h1>{plan.project ?? folder}</h1>
-        <p>{progressText(plan.done, plan.total)}</p>
+        {plan.features.length > 0 && <p>{progressText(plan.done, plan.total)}</p>}
       </header>
       {!trusted && (
         <p className="notice">Restricted Mode: view-only, and no history is recorded. Trust this folder to turn everything on.</p>
@@ -44,7 +44,7 @@ function Plan({ plan, folder, trusted }: { plan: PlanSummary; folder: string; tr
           </li>
         ))}
       </ul>
-      {plan.features.length === 0 && <p className="notice">No features yet.</p>}
+      {plan.features.length === 0 && <p className="notice">No features yet. Ask your coding agent to plan the first one.</p>}
       {plan.problems.length > 0 && (
         <section>
           <h2>Problems</h2>
