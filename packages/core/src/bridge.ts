@@ -66,7 +66,8 @@ function summarize(project: Project): PlanSummary {
     features,
     done: overall.done,
     total: overall.total,
-    problems: validateProject(project),
+    // A listed feature without flows is a normal stage of planning, and its row already says so.
+    problems: validateProject(project).filter((issue) => issue.code !== 'feature-without-flows'),
   };
 }
 

@@ -19,12 +19,13 @@ export class FeatureTree implements vscode.TreeDataProvider<Feature> {
   getTreeItem(feature: Feature): vscode.TreeItem {
     const item = new vscode.TreeItem(feature.label);
     const finished = feature.total > 0 && feature.done === feature.total;
+    const started = feature.done > 0;
     item.description = feature.planned
       ? 'not planned yet'
       : feature.total > 0
         ? `${String(feature.done)}/${String(feature.total)}`
         : 'no steps yet';
-    item.iconPath = new vscode.ThemeIcon(finished ? 'pass-filled' : 'circle-large-outline');
+    item.iconPath = new vscode.ThemeIcon(finished ? 'pass-filled' : started ? 'circle-large-filled' : 'circle-large-outline');
     item.tooltip = feature.description ?? feature.label;
     item.command = { command: 'ideaToCode.openApp', title: 'Open Plan' };
     return item;
@@ -47,7 +48,7 @@ export class SessionTree implements vscode.TreeDataProvider<Session> {
 
   getTreeItem(session: Session): vscode.TreeItem {
     const item = new vscode.TreeItem(session.title ?? (session.kind === 'chat' ? 'Chat' : 'Activity'));
-    item.description = new Date(session.openedAt).toLocaleString();
+    item.description = new Date(session.openedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
     item.iconPath = new vscode.ThemeIcon(session.kind === 'chat' ? 'comment-discussion' : 'history');
     if (session.summary !== undefined) item.tooltip = session.summary;
     return item;

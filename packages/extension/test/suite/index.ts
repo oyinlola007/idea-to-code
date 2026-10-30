@@ -181,7 +181,7 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
 
   await step('validation errors become diagnostics, the app updates, and fixing clears them', async () => {
     const original = await readFile(bookingsPath, 'utf8');
-    const rendered = nextRender(api, (r) => r.problems !== 3);
+    const rendered = nextRender(api, (r) => r.problems > 0);
     const panel = nextRender(api, (r) => r.kind === 'plan');
     await vscode.commands.executeCommand('ideaToCode.openApp');
     await panel;
@@ -322,9 +322,15 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
     await chart;
     check(tabsFor(map)[0]?.input instanceof vscode.TabInputCustom, 'no chart');
     await closeAll();
-    const warnings = planState(api).plan.problems.length;
-    check(warnings === 3, `${String(warnings)} problems`);
+    const bookings = join(root, 'plan', 'features', 'bookings.yaml');
+    const original = await readFile(bookings, 'utf8');
+    await writeFile(bookings, `${original}\nstauts: oops\n`);
     await until('diagnostics', () => vscode.languages.getDiagnostics().some(([, list]) => list.some((d) => d.source === 'idea-to-code')));
+    await writeFile(bookings, original);
+    await until(
+      'diagnostics to clear',
+      () => !vscode.languages.getDiagnostics().some(([, list]) => list.some((d) => d.source === 'idea-to-code')),
+    );
   });
 
   await step('no history, no service, no trace', async () => {
