@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const tempDir = () => mkdtemp(join(tmpdir(), 'itc-store-test-'));
@@ -19,4 +19,24 @@ export async function toolshed(): Promise<Record<string, string>> {
   for (const name of await readdir(join(root, 'features')))
     texts[`plan/features/${name}`] = await readFile(join(root, 'features', name), 'utf8');
   return texts;
+}
+
+/** A project folder holding the Toolshed plan. */
+export async function projectFolder(): Promise<string> {
+  const root = await tempDir();
+  for (const [path, text] of Object.entries(await toolshed())) {
+    const full = join(root, path);
+    await mkdir(dirname(full), { recursive: true });
+    await writeFile(full, text);
+  }
+  return root;
+}
+
+/** How an outside editor saves: a temp file, then a rename over the real one. */
+export async function outsideEditorSave(root: string, path: string, text: string): Promise<void> {
+  const full = join(root, path);
+  await mkdir(dirname(full), { recursive: true });
+  const temp = `${full}.editor-tmp`;
+  await writeFile(temp, text);
+  await rename(temp, full);
 }
