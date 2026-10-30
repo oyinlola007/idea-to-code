@@ -1,0 +1,117 @@
+/* Colours come only from --vscode-* variables, for light, dark and high contrast. */
+body {
+  margin: 0;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+main {
+  box-sizing: border-box;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 1.6em;
+  font-weight: 600;
+}
+
+h2 {
+  margin: 32px 0 8px;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+header p,
+.progress,
+.description {
+  color: var(--vscode-descriptionForeground);
+}
+
+header p {
+  margin: 0;
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.features {
+  margin-top: 24px;
+}
+
+.features li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--vscode-panel-border, var(--vscode-contrastBorder, transparent));
+}
+
+.label {
+  font-weight: 600;
+}
+
+.description {
+  grid-column: 1 / -1;
+}
+
+.notice {
+  margin: 16px 0 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.empty {
+  padding-top: 48px;
+  text-align: center;
+}
+
+button {
+  margin-top: 16px;
+  padding: 6px 14px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+button.link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--vscode-textLink-foreground);
+  background: none;
+  text-align: left;
+}
+
+button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.problems li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 6px 0;
+}
+
+.error {
+  color: var(--vscode-errorForeground);
+}
+
+.warning {
+  color: var(--vscode-editorWarning-foreground);
+}

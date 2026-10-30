@@ -15,19 +15,160 @@
     "Visualization"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "workspaceContains:plan/map.yaml",
+    "onWebviewPanel:ideaToCode.app"
   ],
-  "contributes": {},
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ideaToCode",
+          "title": "idea-to-code",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "ideaToCode": [
+        {
+          "id": "ideaToCode.features",
+          "name": "Features"
+        },
+        {
+          "id": "ideaToCode.sessions",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ideaToCode.features",
+        "contents": "No plan in this workspace yet.\n[Initialize Plan](command:ideaToCode.initPlan)",
+        "when": "workspaceFolderCount > 0 && isWorkspaceTrusted && !ideaToCode.hasPlan"
+      },
+      {
+        "view": "ideaToCode.features",
+        "contents": "No plan in this folder. Trust the folder to create one: Restricted Mode is view-only.",
+        "when": "workspaceFolderCount > 0 && !isWorkspaceTrusted && !ideaToCode.hasPlan"
+      },
+      {
+        "view": "ideaToCode.features",
+        "contents": "Open a folder to plan it.\n[Open Folder](command:vscode.openFolder)",
+        "when": "workspaceFolderCount == 0"
+      },
+      {
+        "view": "ideaToCode.features",
+        "contents": "This plan has no features yet.\n[Open Plan](command:ideaToCode.openApp)",
+        "when": "ideaToCode.hasPlan"
+      },
+      {
+        "view": "ideaToCode.sessions",
+        "contents": "No sessions yet. They appear here as the plan changes.",
+        "when": "isWorkspaceTrusted"
+      },
+      {
+        "view": "ideaToCode.sessions",
+        "contents": "History isn't recorded in Restricted Mode.",
+        "when": "!isWorkspaceTrusted"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "ideaToCode.planEditor",
+        "displayName": "Plan chart",
+        "selector": [
+          {
+            "filenamePattern": "**/plan/map.yaml"
+          },
+          {
+            "filenamePattern": "**/plan/features/*.yaml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ideaToCode.openApp",
+        "title": "Open Plan",
+        "category": "idea-to-code",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "ideaToCode.initPlan",
+        "title": "Initialize Plan in This Workspace",
+        "category": "idea-to-code",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "ideaToCode.reopenAsText",
+        "title": "Reopen as Text",
+        "category": "idea-to-code",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "ideaToCode.openPreviewToSide",
+        "title": "Open Preview to the Side",
+        "category": "idea-to-code",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "ideaToCode.openPreviewToSide",
+          "when": "resourcePath =~ /[\\\\/]plan[\\\\/](map\\.yaml|features[\\\\/][^\\\\/]+\\.yaml)$/ && activeCustomEditorId != ideaToCode.planEditor",
+          "group": "navigation"
+        },
+        {
+          "command": "ideaToCode.reopenAsText",
+          "when": "activeCustomEditorId == ideaToCode.planEditor",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "ideaToCode.openApp",
+          "when": "view == ideaToCode.features && ideaToCode.hasPlan",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "idea-to-code",
+      "properties": {
+        "ideaToCode.planFiles.openAs": {
+          "type": "string",
+          "enum": [
+            "chart",
+            "text"
+          ],
+          "default": "chart",
+          "description": "How plan files open: as a chart, or as text."
+        }
+      }
+    }
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "node esbuild.mjs"
+    "build": "node esbuild.mjs",
+    "test:ext": "tsx scripts/run-ext-tests.ts"
   },
   "dependencies": {
     "@idea-to-code/core": "workspace:*",
     "@idea-to-code/store": "workspace:*"
   },
   "devDependencies": {
+    "@idea-to-code/webview": "workspace:*",
     "@types/vscode": "1.90.0",
-    "esbuild": "0.28.2"
+    "@vscode/test-electron": "3.1.0",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode plans are view-only and no history is recorded. Trust the folder to turn everything on."
+    }
   }
 }

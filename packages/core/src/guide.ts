@@ -1,6 +1,7 @@
 // plan/GUIDE.md and the plan skill: what any coding agent or person reads to
 // update a plan correctly. Node fields, status values and tool names come from
 // the code, so they can't drift. The wording was proven in the ITC-2 agent runs.
+import { Document } from 'yaml';
 import { OPERATIONS } from './opDefinitions.js';
 import { ComponentNode, DecisionNode, EndNode, ReferenceNode, StartNode, Status, StepNode, type NodeType } from './schema.js';
 
@@ -181,6 +182,11 @@ Every node has \`id\`, \`type\` and \`label\` (\`start\` and \`end\` may leave o
 
 The app and the MCP tools validate every plan and report the file, line and reason for any problem. Without them, check every rule above against the files you changed before finishing.
 `;
+}
+
+/** The map.yaml of a brand-new plan. */
+export function newPlanMap(project: string): string {
+  return new Document({ project, features: [] }).toString();
 }
 
 export function generateSkill(marker: string): string {
