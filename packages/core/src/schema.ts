@@ -96,6 +96,9 @@ export type FeatureFile = z.infer<typeof FeatureFile>;
 export type MapFile = z.infer<typeof MapFile>;
 export type NodeType = PlanNode['type'];
 
+/** The format version, recorded by the history store. User files never carry a version. */
+export const PLAN_FORMAT_VERSION = 1;
+
 export function nodeLabel(n: PlanNode): string {
   return n.label ?? (n.type === 'start' ? 'Start' : n.type === 'end' ? 'End' : n.id);
 }
