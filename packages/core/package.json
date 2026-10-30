@@ -10,7 +10,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "gen-schema": "tsx scripts/gen-schema.ts",
-    "validate-plan": "tsx scripts/validate.ts"
+    "validate-plan": "tsx scripts/validate.ts",
+    "agent-check": "tsx scripts/agent-check.ts"
   },
   "dependencies": {
     "yaml": "2.9.1",

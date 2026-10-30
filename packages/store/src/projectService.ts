@@ -3,7 +3,22 @@
 // is held across all of it, so another process's change detection can't see an
 // unfinished edit and credit it to an outside editor. History problems never stop
 // an edit: it succeeds with a warning, and the next detection catches up.
-import { applyOperation, diffProjects, loadFromTexts, summarizeDiff, type OpRequest, type OpSuccess } from '@idea-to-code/core';
+import {
+  addConnector,
+  applyOperation,
+  CONNECTORS,
+  connectorState,
+  diffProjects,
+  generateGuide,
+  loadFromTexts,
+  removeConnector,
+  summarizeDiff,
+  type ConnectorId,
+  type ConnectorResult,
+  type ConnectorState,
+  type OpRequest,
+  type OpSuccess,
+} from '@idea-to-code/core';
 import { hashOf } from './blobs.js';
 import { StoreError } from './errors.js';
 import type { Snapshot, SnapshotSource } from './events.js';
@@ -351,6 +366,29 @@ export class ProjectService {
   async writeProjectFile(path: string, content: string): Promise<void> {
     checkProjectPath(path);
     await this.options.files.write(path, content);
+  }
+
+  /** Writes plan/GUIDE.md, leaving it alone if it's already current. Not part of plan history. */
+  async writeGuide(): Promise<void> {
+    const guide = generateGuide();
+    if ((await this.options.files.read('plan/GUIDE.md')) !== guide) await this.writeProjectFile('plan/GUIDE.md', guide);
+  }
+
+  /** Whether each agent connector is set up in this project. */
+  async connectorStates(): Promise<{ id: ConnectorId; state: ConnectorState }[]> {
+    return Promise.all(CONNECTORS.map(async ({ id, path }) => ({ id, state: connectorState(id, await this.options.files.read(path)) })));
+  }
+
+  /** Turns a connector on or off, touching only what idea-to-code added. */
+  async setConnector(id: ConnectorId, on: boolean): Promise<ConnectorResult> {
+    const path = CONNECTORS.find((c) => c.id === id)?.path;
+    if (path === undefined) return { status: 'refused', reason: `unknown connector "${id}"` };
+    const current = await this.options.files.read(path);
+    const result = on ? addConnector(id, current) : removeConnector(id, current);
+    if (result.status === 'refused' || result.status === 'unchanged' || result.status === 'absent') return result;
+    if (result.text === null) await this.options.files.remove(path);
+    else await this.writeProjectFile(path, result.text);
+    return result;
   }
 
   /** Starts noticing outside changes, handling a burst once it goes quiet. */
