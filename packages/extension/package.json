@@ -23,7 +23,8 @@
     "build": "node esbuild.mjs"
   },
   "dependencies": {
-    "@idea-to-code/core": "workspace:*"
+    "@idea-to-code/core": "workspace:*",
+    "@idea-to-code/store": "workspace:*"
   },
   "devDependencies": {
     "@types/vscode": "1.90.0",

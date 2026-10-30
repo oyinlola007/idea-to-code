@@ -183,6 +183,11 @@ export class ProjectHistory {
     return withLock(join(this.dir, 'lock'), fn, this.options.lock);
   }
 
+  /** Held across a whole read, edit, write and snapshot. The history lock stays inside it, around the index. */
+  withPlanLock<T>(fn: () => Promise<T>): Promise<T> {
+    return withLock(join(this.dir, 'plan.lock'), fn, this.options.lock);
+  }
+
   private async readIndex(): Promise<{ state: HistoryState; damagedLines: number }> {
     const { events, damagedLines } = parseIndex((await readTextOrNull(this.indexPath)) ?? '');
     return { state: replay(events), damagedLines };
@@ -400,7 +405,7 @@ export class ProjectHistory {
       if ((await readBlob(this.dataDir, hash)) === null) problems.push(`blob ${hash} is missing or damaged`);
     }
     const leftovers = (await readdir(this.dir)).filter(
-      (n) => n === 'lock' || n.includes('.tmp-') || n.includes('.stale-') || n.endsWith('.steal'),
+      (n) => n === 'lock' || n === 'plan.lock' || n.includes('.tmp-') || n.includes('.stale-') || n.endsWith('.steal'),
     );
     for (const name of leftovers) problems.push(`leftover ${name}`);
     return { snapshots: state.snapshots.length, blobs: hashes.size, damagedLines, problems };

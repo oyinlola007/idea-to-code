@@ -169,6 +169,9 @@ importers:
       '@idea-to-code/core':
         specifier: workspace:*
         version: link:packages/core
+      '@idea-to-code/store':
+        specifier: workspace:*
+        version: link:packages/store
     devDependencies:
       '@eslint/js':
         specifier: 10.0.1
@@ -224,6 +227,9 @@ importers:
       '@idea-to-code/core':
         specifier: workspace:*
         version: link:../core
+      '@idea-to-code/store':
+        specifier: workspace:*
+        version: link:../store
     devDependencies:
       '@types/vscode':
         specifier: 1.90.0
