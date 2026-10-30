@@ -1,5 +1,7 @@
 // Bundles the extension host as CommonJS, which every VS Code core from the
-// engine floor (1.90) up can load (ITC-3).
+// engine floor (1.90) up can load (ITC-3), and copies the webview in beside it:
+// webviews may only load files from inside the extension.
+import { cpSync, rmSync } from 'node:fs';
 import { build } from 'esbuild';
 
 await build({
@@ -14,3 +16,6 @@ await build({
   sourcemap: true,
   logLevel: 'info',
 });
+
+rmSync('dist/webview', { recursive: true, force: true });
+cpSync('../webview/dist', 'dist/webview', { recursive: true });
