@@ -80,7 +80,7 @@ pnpm validate-plan <dir>                # validate a plan folder (the one contai
 
 1. **Explain trade-offs:** for any non-obvious choice, give 2–3 options with trade-offs and recommend one. Don't silently pick the popular option.
 2. **Ask before guessing:** when a request is ambiguous, ask a few pointed questions with suggested defaults before writing code.
-3. **One ticket per branch:** each Jira ticket (project ITC) gets its own branch, `feature/itc-<n>-<slug>`. Plan it, build it, validate it. Work found outside the ticket gets noted, not built.
+3. **Work directly on `main`:** one commit per Jira ticket (project ITC), with the ticket number in the message (`ITC-7: …`). Commit only when the full check passes, so `main` always works. Plan it, build it, validate it. Work found outside the ticket gets noted, not built.
 4. **"Done" means the full check passes.** UI changes get screenshots and a visual review; the founder signs off on the look.
 5. **Simple and contained:** keep `core` pure, validate everything that comes in from outside, prefer the simplest thing that works, and say why before adding a dependency.
 6. **Git:** commit locally, with no author, `Co-Authored-By` or "generated with" lines. Never push or open PRs unless asked.
