@@ -9,6 +9,7 @@ import { fitWidthViewport, fromElk, toElkGraph, type Placed } from '../layout/ge
 import type { Measure } from '../layout/metrics.js';
 import { EdgeMarkers, edgeTypes, type PlanFlowEdge } from './PlanEdge.js';
 import { nodeTypes, type PlanFlowNode } from './nodes.js';
+import { settle } from './settle.js';
 
 type Timed = Placed & { ms: number };
 
@@ -43,8 +44,11 @@ interface Props {
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const LEAVE_MS = 200;
+const LEAVE_LIMIT_MS = LEAVE_MS + 80;
 const ENTER_MS = 280;
 const ARRIVED_MS = 1400;
+/** How long a click on a card that opens waits to see whether it's a double-click. */
+const DOUBLE_CLICK_MS = 250;
 const SETTLE_MS = ENTER_MS + 20;
 const sleep = (ms: number) =>
   new Promise((resolve) => {
@@ -60,6 +64,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
   const [phase, setPhase] = useState<'shown' | 'leaving' | 'entering'>('entering');
   const [arrived, setArrived] = useState<string | null>(null);
   const userZoomed = useRef(false);
+  const leaving = useRef(false);
+  const pendingClick = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** The card the current level was centred on (coming back up), kept for resizes. */
   const focusRef = useRef<string | undefined>(undefined);
 
@@ -102,6 +108,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
 
   /** Shows a newly placed level with its entry transition, reading the props of that moment. */
   const showPlaced = useEffectEvent((p: Timed) => {
+    leaving.current = false;
     const focus = entry.kind === 'out' ? entry.focus : undefined;
     const target = targetViewport(p, focus);
     focusRef.current = focus;
@@ -142,7 +149,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
 
   // Keep the selected card visible beside the details panel (320px + margins).
   const keepSelectedVisible = useCallback(() => {
-    if (!selected || !panelOpen) return;
+    // A pan now would interrupt the leaving animation.
+    if (!selected || !panelOpen || leaving.current) return;
     const n = flow.getNode(selected);
     const el = wrapper.current;
     if (!n?.width || !el) return;
@@ -185,25 +193,37 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     () => ({
       async leave(kind, nodeId) {
         if (reducedMotion()) return;
+        clearTimeout(pendingClick.current);
+        leaving.current = true;
         setPhase('leaving');
         const n = nodeId ? flow.getNode(nodeId) : undefined;
         const vp = flow.getViewport();
         if (kind === 'in' && n?.width && n.height) {
-          await flow.setCenter(n.position.x + n.width / 2, n.position.y + n.height / 2, {
+          const center = flow.setCenter(n.position.x + n.width / 2, n.position.y + n.height / 2, {
             zoom: Math.min(2, vp.zoom * 1.6),
             duration: LEAVE_MS,
           });
+          await settle(center, LEAVE_LIMIT_MS);
         } else {
           const el = wrapper.current;
           const cx = (el?.clientWidth ?? 960) / 2;
           const cy = (el?.clientHeight ?? 800) / 3;
           const s = 0.88;
-          await flow.setViewport({ x: cx - (cx - vp.x) * s, y: cy - (cy - vp.y) * s, zoom: vp.zoom * s }, { duration: LEAVE_MS });
+          const out = flow.setViewport({ x: cx - (cx - vp.x) * s, y: cy - (cy - vp.y) * s, zoom: vp.zoom * s }, { duration: LEAVE_MS });
+          await settle(out, LEAVE_LIMIT_MS);
         }
         await sleep(0);
       },
     }),
     [flow],
+  );
+
+  // A click waiting on the level we just left mustn't select anything on the next one.
+  useEffect(
+    () => () => {
+      clearTimeout(pendingClick.current);
+    },
+    [key],
   );
 
   const neighbours = useMemo(() => {
@@ -294,12 +314,23 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
           if (event && 'type' in event && (event.type === 'wheel' || event.type === 'touchstart')) userZoomed.current = true;
         }}
         onNodeClick={(_, n) => {
-          onSelect(n.id);
+          clearTimeout(pendingClick.current);
+          const { node } = n.data;
+          // A double-click starts with a click: only cards that open have to wait to tell them apart.
+          if (node.opens === undefined && node.jumpsTo === undefined) {
+            onSelect(n.id);
+            return;
+          }
+          pendingClick.current = setTimeout(() => {
+            onSelect(n.id);
+          }, DOUBLE_CLICK_MS);
         }}
         onNodeDoubleClick={(_, n) => {
+          clearTimeout(pendingClick.current);
           onOpen(n.data.node);
         }}
         onPaneClick={() => {
+          clearTimeout(pendingClick.current);
           onSelect(null);
         }}
       />

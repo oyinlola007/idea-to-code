@@ -194,10 +194,11 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
   const open = useCallback(
     async (node: VNode) => {
       const target = node.opens ?? node.jumpsTo;
-      if (target === undefined || !(await whileLeaving('in', node.id))) return;
+      // Already there: nothing would bring back a chart that faded out.
+      if (target === undefined || target === levelId || !(await whileLeaving('in', node.id))) return;
       dispatch({ type: 'open', level: target }, { kind: 'in' });
     },
-    [dispatch, whileLeaving],
+    [dispatch, levelId, whileLeaving],
   );
 
   /** The card in `above` that leads to `below`, when it's exactly one level up. */
