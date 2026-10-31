@@ -3,13 +3,15 @@
 // the breadcrumb and transitions. The host only supplies the model.
 import { OVERVIEW, type AppState, type Level, type ViewModel, type VNode } from '@idea-to-code/core';
 import { ReactFlowProvider } from '@xyflow/react';
-import { useCallback, useEffect, useState } from 'react';
-import { loadView, log, onHostMessage, saveView, send, type SavedView } from './bridge.js';
-import { Chart, type RenderInfo } from './chart/Chart.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadSaved, log, onHostMessage, save, send } from './bridge.js';
+import { Chart, type ChartHandle, type Entry, type RenderInfo } from './chart/Chart.js';
 import { createLayouter, type Layouter } from './layout/elkClient.js';
 import { canvasMeasure } from './layout/measure.js';
 import { approxMeasure, type Measure } from './layout/metrics.js';
+import { canBack, canForward, currentLevel, initialNav, navReducer, restoreNav, type NavAction, type NavState } from './nav.js';
 import './theme.css';
+import { Breadcrumb } from './ui/Breadcrumb.js';
 import { DetailsPanel } from './ui/DetailsPanel.js';
 import { ProgressRing, progressText } from './ui/ProgressRing.js';
 
@@ -78,19 +80,53 @@ function Problems({ model }: { model: ViewModel }) {
   );
 }
 
-function Toolbar({ level, onUp }: { level: Level; onUp: () => void }) {
+interface ToolbarProps {
+  level: Level;
+  nav: NavState;
+  onHistory: (dir: 'back' | 'forward') => void;
+  onGo: (level: string) => void;
+}
+
+function Toolbar({ level, nav, onHistory, onGo }: ToolbarProps) {
+  const { done, total } = level.progress;
   return (
     <header className="toolbar">
-      {level.parent !== null && (
-        <button type="button" className="icon-button" onClick={onUp} title="Up a level (Esc)" aria-label="Up a level">
-          <span className="codicon codicon-arrow-up" aria-hidden="true" />
+      <div className="toolbar__history">
+        <button
+          type="button"
+          className="icon-button"
+          disabled={!canBack(nav)}
+          onClick={() => {
+            onHistory('back');
+          }}
+          title="Back (Alt+←)"
+          aria-label="Back"
+        >
+          <span className="codicon codicon-arrow-left" aria-hidden="true" />
         </button>
-      )}
-      <span className="toolbar__title">{level.title}</span>
+        <button
+          type="button"
+          className="icon-button"
+          disabled={!canForward(nav)}
+          onClick={() => {
+            onHistory('forward');
+          }}
+          title="Forward (Alt+→)"
+          aria-label="Forward"
+        >
+          <span className="codicon codicon-arrow-right" aria-hidden="true" />
+        </button>
+      </div>
+      <Breadcrumb crumbs={level.crumbs} onGo={onGo} />
       <div className="toolbar__meta">
+        {level.depth > 0 && (
+          <span className="depth" title={`${String(level.depth)} level${level.depth > 1 ? 's' : ''} below the overview`}>
+            Level {level.depth}
+          </span>
+        )}
         <span className="toolbar__progress" title={progressText(level.progress)}>
           <ProgressRing progress={level.progress} size={14} />
-          {level.progress.total > 0 ? `${String(level.progress.done)}/${String(level.progress.total)}` : '—'}
+          {total > 0 ? `${String(done)}/${String(total)}` : '—'}
         </span>
       </div>
     </header>
@@ -109,21 +145,17 @@ interface ViewerProps {
   trusted: boolean;
   model: ViewModel;
   version: number;
-  view: SavedView;
-  onView: (view: SavedView) => void;
+  nav: NavState;
+  entry: Entry;
+  onNav: (nav: (state: NavState) => NavState, entry?: Entry) => void;
 }
 
-function Viewer({ trusted, model, version, view, onView }: ViewerProps) {
-  const { level: levelId, selected } = view;
-  const setSelected = useCallback(
-    (id: string | null) => {
-      onView({ level: levelId, selected: id });
-    },
-    [levelId, onView],
-  );
+function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
   const [layouter, setLayouter] = useState<Layouter | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [measure] = useState<Measure>(firstMeasure);
+  const chart = useRef<ChartHandle>(null);
+  const busy = useRef(false);
 
   useEffect(() => {
     createLayouter((mode, error) => {
@@ -135,44 +167,104 @@ function Viewer({ trusted, model, version, view, onView }: ViewerProps) {
       });
   }, []);
 
-  // A level can disappear when the plan changes.
-  const level = model.levels[levelId] ?? model.levels[OVERVIEW];
-  const shownId = level?.id ?? OVERVIEW;
-  const selectedNode = level?.nodes.find((node) => node.id === selected) ?? null;
-
-  useEffect(() => {
-    saveView({ level: shownId, selected: selectedNode?.id ?? null });
-  }, [shownId, selectedNode]);
-
-  const open = useCallback(
-    (node: VNode) => {
-      const target = node.opens ?? node.jumpsTo;
-      if (target !== undefined) onView({ level: target, selected: null });
+  const dispatch = useCallback(
+    (action: NavAction, nextEntry?: Entry) => {
+      onNav((state) => navReducer(model)(state, action), nextEntry);
     },
-    [onView],
+    [model, onNav],
   );
 
+  const levelId = currentLevel(nav);
+  const level = model.levels[levelId] ?? model.levels[OVERVIEW];
+  const selectedNode = level?.nodes.find((node) => node.id === nav.selected) ?? null;
   const parent = level?.parent ?? null;
-  const goUp = useCallback(() => {
-    if (parent !== null) onView({ level: parent, selected: null });
-  }, [parent, onView]);
+
+  /** Plays a leaving animation once, ignoring clicks while it runs. */
+  const whileLeaving = useCallback(async (kind: 'in' | 'out', nodeId?: string) => {
+    if (busy.current) return false;
+    busy.current = true;
+    try {
+      await chart.current?.leave(kind, nodeId);
+    } finally {
+      busy.current = false;
+    }
+    return true;
+  }, []);
+
+  const open = useCallback(
+    async (node: VNode) => {
+      const target = node.opens ?? node.jumpsTo;
+      if (target === undefined || !(await whileLeaving('in', node.id))) return;
+      dispatch({ type: 'open', level: target }, { kind: 'in' });
+    },
+    [dispatch, whileLeaving],
+  );
+
+  /** The card in `above` that leads to `below`, when it's exactly one level up. */
+  const cardLeadingTo = useCallback(
+    (above: string, below: string): string | undefined => {
+      if (model.levels[below]?.parent !== above) return undefined;
+      return model.levels[above]?.nodes.find((node) => node.opens === below || node.jumpsTo === below)?.id;
+    },
+    [model],
+  );
+
+  /** Goes out to any level above. One level up centres the card we came from; bigger jumps start at the top. */
+  const goOut = useCallback(
+    async (target: string) => {
+      const focus = cardLeadingTo(target, levelId);
+      if (!(await whileLeaving('out'))) return;
+      dispatch({ type: 'open', level: target }, { kind: 'out', ...(focus === undefined ? {} : { focus }) });
+    },
+    [cardLeadingTo, levelId, dispatch, whileLeaving],
+  );
+
+  const history = useCallback(
+    async (dir: 'back' | 'forward') => {
+      const target = nav.history[nav.cursor + (dir === 'back' ? -1 : 1)];
+      if (target === undefined) return;
+      // Back to the level directly above behaves like going up: centre the card we left.
+      const focus = dir === 'back' ? cardLeadingTo(target, levelId) : undefined;
+      if (focus === undefined) {
+        dispatch({ type: dir }, { kind: 'fade' });
+      } else if (await whileLeaving('out')) {
+        dispatch({ type: dir }, { kind: 'out', focus });
+      }
+    },
+    [nav, cardLeadingTo, levelId, dispatch, whileLeaving],
+  );
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (selectedNode) setSelected(null);
-        else goUp();
+        if (nav.details || nav.selected !== null) dispatch({ type: 'escape' });
+        else if (parent !== null) void goOut(parent);
       } else if (event.key === 'Enter' && selectedNode && !(event.target instanceof HTMLButtonElement)) {
         event.preventDefault();
-        open(selectedNode);
+        void open(selectedNode);
+      } else if (event.altKey && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        void history('back');
+      } else if (event.altKey && event.key === 'ArrowRight') {
+        event.preventDefault();
+        void history('forward');
+      } else if (event.key === 'Backspace' && parent !== null) {
+        event.preventDefault();
+        void goOut(parent);
       }
     };
+    const onMouse = (event: MouseEvent) => {
+      if (event.button === 3) void history('back');
+      if (event.button === 4) void history('forward');
+    };
     window.addEventListener('keydown', onKey);
+    window.addEventListener('mouseup', onMouse);
     return () => {
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mouseup', onMouse);
     };
-  }, [selectedNode, goUp, open, setSelected]);
+  }, [nav, parent, selectedNode, dispatch, goOut, open, history]);
 
   const onRendered = useCallback(
     (info: RenderInfo) => {
@@ -183,6 +275,18 @@ function Viewer({ trusted, model, version, view, onView }: ViewerProps) {
   const onError = useCallback((message: string) => {
     log('error', message);
   }, []);
+  const onSelect = useCallback(
+    (id: string | null) => {
+      dispatch({ type: 'select', id });
+    },
+    [dispatch],
+  );
+  const onOpen = useCallback(
+    (node: VNode) => {
+      void open(node);
+    },
+    [open],
+  );
 
   if (fatal !== null) {
     return (
@@ -203,7 +307,16 @@ function Viewer({ trusted, model, version, view, onView }: ViewerProps) {
 
   return (
     <div className="app">
-      <Toolbar level={level} onUp={goUp} />
+      <Toolbar
+        level={level}
+        nav={nav}
+        onHistory={(dir) => {
+          void history(dir);
+        }}
+        onGo={(target) => {
+          void goOut(target);
+        }}
+      />
       {!trusted && (
         <p className="level-description">
           Restricted Mode: view-only, and no history is recorded. Trust this folder to turn everything on.
@@ -213,25 +326,27 @@ function Viewer({ trusted, model, version, view, onView }: ViewerProps) {
       <Problems model={model} />
       <main className="stage">
         <Chart
+          ref={chart}
           level={level}
           version={version}
           layouter={layouter}
           measure={measure}
           selected={selectedNode?.id ?? null}
-          panelOpen={selectedNode !== null}
-          onSelect={setSelected}
-          onOpen={open}
+          panelOpen={nav.details}
+          entry={entry}
+          onSelect={onSelect}
+          onOpen={onOpen}
           onRendered={onRendered}
           onError={onError}
         />
-        {selectedNode && (
+        {nav.details && selectedNode && (
           <DetailsPanel
             node={selectedNode}
             level={level}
             onClose={() => {
-              setSelected(null);
+              dispatch({ type: 'closeDetails' });
             }}
-            onOpen={open}
+            onOpen={onOpen}
             onSource={(node) => {
               send({ type: 'open-source', file: node.source.file, line: Math.max(node.source.line, 1) });
             }}
@@ -247,19 +362,30 @@ export function App() {
   // The host sends state on every refresh; only a real change to the plan lays the chart out again.
   const [shown, setShown] = useState<{ model: ViewModel; json: string; version: number } | null>(null);
   // Held here because the host can ask for a level before the viewer has mounted.
-  const [view, setView] = useState<SavedView>(() => loadView() ?? { level: OVERVIEW, selected: null });
+  const [nav, setNav] = useState<NavState>(() => restoreNav(loadSaved()) ?? initialNav());
+  const [entry, setEntry] = useState<Entry>({ kind: 'fade' });
 
   useEffect(() => {
+    let current: { model: ViewModel; json: string } | undefined;
     const stop = onHostMessage((message) => {
       if (message.type === 'show-level') {
-        setView({ level: message.level, selected: null });
+        const model = current?.model;
+        if (!model) return;
+        setEntry({ kind: 'in' });
+        setNav((s) => navReducer(model)(s, { type: 'open', level: message.level }));
         return;
       }
       setState(message.state);
       if (message.state.kind !== 'plan') return;
       const { model } = message.state;
       const json = JSON.stringify(model);
-      setShown((old) => (old?.json === json ? old : { model, json, version: (old?.version ?? 0) + 1 }));
+      if (json === current?.json) return;
+      const before = current?.model;
+      current = { model, json };
+      setShown((old) => ({ model, json, version: (old?.version ?? 0) + 1 }));
+      setEntry({ kind: 'fade' });
+      // A level or card can disappear when the plan changes.
+      setNav((s) => navReducer(model, before)(s, { type: 'reconcile' }));
     });
     send({ type: 'ready' });
     return stop;
@@ -271,11 +397,25 @@ export function App() {
     send({ type: 'rendered', kind: state.kind, features: plan?.features.length ?? 0, problems: plan?.problems.length ?? 0 });
   }, [state]);
 
+  const hasPlan = state?.kind === 'plan' && shown !== null;
+  const levelId = currentLevel(nav);
+
+  useEffect(() => {
+    if (!hasPlan) return;
+    save({ history: nav.history, cursor: nav.cursor, selected: nav.selected });
+    send({ type: 'level', level: levelId });
+  }, [hasPlan, nav, levelId]);
+
+  const onNav = useCallback((update: (s: NavState) => NavState, next?: Entry) => {
+    if (next) setEntry(next);
+    setNav(update);
+  }, []);
+
   if (!state) return null;
   return (
     <ReactFlowProvider>
       {state.kind === 'plan' && shown ? (
-        <Viewer trusted={state.trusted} model={shown.model} version={shown.version} view={view} onView={setView} />
+        <Viewer trusted={state.trusted} model={shown.model} version={shown.version} nav={nav} entry={entry} onNav={onNav} />
       ) : (
         <NoPlan trusted={state.trusted} />
       )}

@@ -61,6 +61,8 @@ export const WebviewMessage = z.discriminatedUnion('type', [
     layoutMs: z.number(),
     workerMode: z.enum(['blob', 'main']),
   }),
+  /** The level this tab is showing, for agents to read. */
+  z.strictObject({ type: z.literal('level'), level: z.string().max(500) }),
   z.strictObject({ type: z.literal('init-plan') }),
   z.strictObject({ type: z.literal('open-source'), file: z.string().max(500), line: z.number().int().min(1) }),
 ]);

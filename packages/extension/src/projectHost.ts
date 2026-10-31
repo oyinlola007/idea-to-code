@@ -68,6 +68,15 @@ export class ProjectHost implements vscode.Disposable {
     return planFileIn(this.folder.uri.path, uri.path);
   }
 
+  /** Records the level being looked at, for agents. In Restricted Mode nothing is recorded. */
+  async publishLevel(level: string): Promise<void> {
+    try {
+      await this.serviceInstance?.projectHistory?.writeView(level);
+    } catch (err) {
+      this.log.warn(`couldn't record the current level: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   /** Waits for any refresh already under way. */
   settled(): Promise<void> {
     return this.queue;

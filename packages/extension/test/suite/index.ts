@@ -147,6 +147,9 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
       check(r.nodes > 0, `${r.level} has no nodes`);
     }
     noWebviewErrors(api);
+    const history = api.host.service?.projectHistory;
+    const last = levels.at(-1);
+    await until('the current level in view.json', async () => (await history?.readView())?.level === last);
     api.closeApp();
     await closeAll();
   });
@@ -384,6 +387,8 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
     await appendFile(bookings, '# a note\n');
     await sleep(3000);
     check(!(await exists(join(data, 'projects'))), 'history was written');
+    await api.host.publishLevel('bookings');
+    check(!(await exists(join(data, 'projects'))), 'the level was recorded');
     check(!(await exists(join(data, 'objects'))), 'blobs were written');
     check((await api.trees.sessions.getChildren()).length === 0, 'sessions listed');
   });

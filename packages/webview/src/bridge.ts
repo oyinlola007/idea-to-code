@@ -35,17 +35,11 @@ export function onHostMessage(callback: (message: HostMessage) => void): () => v
   };
 }
 
-export interface SavedView {
-  level: string;
-  selected: string | null;
+/** What a hidden or reloaded tab saved; checked by whoever reads it. */
+export function loadSaved(): unknown {
+  return window.__vscode.getState();
 }
 
-/** What to restore when a hidden or reloaded tab comes back. */
-export function loadView(): SavedView | undefined {
-  const saved = window.__vscode.getState() as Partial<SavedView> | undefined;
-  return typeof saved?.level === 'string' ? { level: saved.level, selected: saved.selected ?? null } : undefined;
-}
-
-export function saveView(view: SavedView): void {
-  window.__vscode.setState(view);
+export function save(state: unknown): void {
+  window.__vscode.setState(state);
 }
