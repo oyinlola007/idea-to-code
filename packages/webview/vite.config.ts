@@ -11,6 +11,7 @@ export default defineConfig({
     emptyOutDir: true,
     cssCodeSplit: false,
     assetsInlineLimit: 0,
+    chunkSizeWarningLimit: 4000,
     rolldownOptions: {
       input: { webview: 'index.html' },
       output: {

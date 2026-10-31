@@ -39,7 +39,11 @@ export function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): 
   // Boot probe: without it, a load failure or CSP block is a blank tab with no error.
   window.__vscode = acquireVsCodeApi();
   const report = (message) => window.__vscode.postMessage({ type: 'log', level: 'error', message: String(message).slice(0, 500) });
-  window.addEventListener('error', (e) => report('boot: ' + e.message + ' ' + (e.filename || (e.target && (e.target.src || e.target.href)) || '')), true);
+  window.addEventListener('error', (e) => {
+    // A harmless browser notice that a resize took an extra frame, not a failure.
+    if (e.message && e.message.startsWith('ResizeObserver loop')) return;
+    report('boot: ' + e.message + ' ' + (e.filename || (e.target && (e.target.src || e.target.href)) || ''));
+  }, true);
   document.addEventListener('securitypolicyviolation', (e) => report('csp: ' + e.violatedDirective + ' blocked ' + e.blockedURI));
 </script>
 <script nonce="${nonce}" type="module" src="${asset('webview.js')}"></script>

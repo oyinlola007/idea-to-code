@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { type Project, loadFromTexts } from './load.js';
 import { OVERVIEW, rollup } from './progress.js';
 import { indexProject, validateProject } from './validate.js';
+import { ViewModel } from './viewModel.js';
 
 const Problem = z.strictObject({
   file: z.string(),
@@ -36,19 +37,32 @@ export type PlanSummary = z.infer<typeof PlanSummary>;
 
 export const AppState = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('no-plan'), trusted: z.boolean() }),
-  z.strictObject({ kind: z.literal('plan'), trusted: z.boolean(), folder: z.string(), plan: PlanSummary }),
+  z.strictObject({ kind: z.literal('plan'), trusted: z.boolean(), folder: z.string(), plan: PlanSummary, model: ViewModel }),
 ]);
 export type AppState = z.infer<typeof AppState>;
 
-export const HostMessage = z.discriminatedUnion('type', [z.strictObject({ type: z.literal('state'), state: AppState })]);
+export const HostMessage = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('state'), state: AppState }),
+  /** Show this level, e.g. the feature whose file was opened. */
+  z.strictObject({ type: z.literal('show-level'), level: z.string() }),
+]);
 export type HostMessage = z.infer<typeof HostMessage>;
 
 export const WebviewMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('ready') }),
-  z.strictObject({ type: z.literal('log'), level: z.enum(['info', 'error']), message: z.string().max(2000) }),
+  z.strictObject({ type: z.literal('log'), level: z.enum(['info', 'warn', 'error']), message: z.string().max(2000) }),
   z.strictObject({ type: z.literal('rendered'), kind: z.enum(['no-plan', 'plan']), features: z.number(), problems: z.number() }),
+  z.strictObject({
+    type: z.literal('chart-rendered'),
+    level: z.string(),
+    nodes: z.number().int(),
+    width: z.number(),
+    height: z.number(),
+    layoutMs: z.number(),
+    workerMode: z.enum(['blob', 'main']),
+  }),
   z.strictObject({ type: z.literal('init-plan') }),
-  z.strictObject({ type: z.literal('open-problem'), file: z.string().max(500), line: z.number().int().min(1) }),
+  z.strictObject({ type: z.literal('open-source'), file: z.string().max(500), line: z.number().int().min(1) }),
 ]);
 export type WebviewMessage = z.infer<typeof WebviewMessage>;
 

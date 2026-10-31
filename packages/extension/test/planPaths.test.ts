@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { looksLikePlan, planFileIn } from '../src/planPaths.js';
+import { featureOfPlanFile, looksLikePlan, planFileIn } from '../src/planPaths.js';
 
 describe('planFileIn', () => {
   it('finds plan files in the folder', () => {
@@ -31,5 +31,12 @@ describe('looksLikePlan', () => {
     expect(looksLikePlan(null)).toBe(false);
     expect(looksLikePlan('')).toBe(false);
     expect(looksLikePlan('routes:\n  - project: x\n')).toBe(false);
+  });
+});
+
+describe('featureOfPlanFile', () => {
+  it('names the feature, and not for the map', () => {
+    expect(featureOfPlanFile('plan/features/bookings.yaml')).toBe('bookings');
+    expect(featureOfPlanFile('plan/map.yaml')).toBeUndefined();
   });
 });

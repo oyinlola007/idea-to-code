@@ -14,3 +14,4 @@ export * from './progress.js';
 export * from './schema.js';
 export * from './tools.js';
 export * from './validate.js';
+export * from './viewModel.js';
