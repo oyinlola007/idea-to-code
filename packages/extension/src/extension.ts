@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { AppPanel } from './appPanel.js';
 import { detectOptionalApis, type OptionalApis } from './detect.js';
 import { initPlan, type InitOptions } from './initPlan.js';
+import { ModelHost } from './models/modelHost.js';
 import { PlanEditor, reopenAsText } from './planEditor.js';
 import { ProjectHost } from './projectHost.js';
 import { FeatureTree, registerSidebar, SessionTree } from './sidebar.js';
@@ -26,7 +27,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   log.info(`activated in ${vscode.env.appName} ${vscode.version}; optional APIs: ${JSON.stringify(optionalApis)}`);
 
   const trust = new WorkspaceTrust();
-  const host = new ProjectHost(log, trust);
+  const models = new ModelHost(context.secrets);
+  const host = new ProjectHost(log, trust, models);
   const events = new WebviewEvents();
   const app = new AppPanel(context, host, events, log);
   const editor = new PlanEditor(context, host, events, log);
@@ -35,6 +37,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(
     log,
     trust,
+    models,
     host,
     events,
     registerSidebar(host, trees),
@@ -45,6 +48,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }),
     vscode.commands.registerCommand('ideaToCode.showHistory', (session?: string) => {
       app.showHistory(session);
+    }),
+    vscode.commands.registerCommand('ideaToCode.openModelSettings', () => {
+      app.showModelSettings();
     }),
     vscode.commands.registerCommand('ideaToCode.initPlan', async (options?: InitOptions) => {
       await initPlan(host, trust, options);

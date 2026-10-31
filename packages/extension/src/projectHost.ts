@@ -13,6 +13,7 @@ import {
 import { appDataDir, buildHistoryView, HistoryStore, ProjectService, type PlanFiles, type RestoreResult } from '@idea-to-code/store';
 import { homedir } from 'node:os';
 import * as vscode from 'vscode';
+import type { ModelHost } from './models/modelHost.js';
 import { looksLikePlan, planFileIn } from './planPaths.js';
 import type { WorkspaceTrust } from './trust.js';
 import { VsCodePlanFiles } from './vscodePlanFiles.js';
@@ -45,6 +46,7 @@ export class ProjectHost implements vscode.Disposable {
   constructor(
     private readonly log: vscode.LogOutputChannel,
     private readonly trust: WorkspaceTrust,
+    readonly models: ModelHost,
   ) {
     this.state = { kind: 'no-plan', trusted: trust.isTrusted };
     const watcher = vscode.workspace.createFileSystemWatcher('**/plan/**/*.yaml');

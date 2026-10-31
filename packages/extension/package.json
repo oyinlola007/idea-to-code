@@ -101,6 +101,13 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "ideaToCode.openModelSettings",
+        "title": "Model Settings",
+        "category": "idea-to-code",
+        "icon": "$(settings-gear)",
+        "enablement": "isWorkspaceTrusted && ideaToCode.hasPlan"
+      },
+      {
         "command": "ideaToCode.showHistory",
         "title": "Show History",
         "category": "idea-to-code",
@@ -149,6 +156,40 @@
     "configuration": {
       "title": "idea-to-code",
       "properties": {
+        "ideaToCode.models.source": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "key"
+          ],
+          "default": "editor",
+          "scope": "application",
+          "description": "Where the built-in chat gets its models. Without any models in your editor, your own API key is used."
+        },
+        "ideaToCode.models.provider": {
+          "type": "string",
+          "enum": [
+            "anthropic",
+            "openai",
+            "google",
+            "custom"
+          ],
+          "default": "anthropic",
+          "scope": "application",
+          "description": "Which provider your own API key is for."
+        },
+        "ideaToCode.models.baseUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "The address of a custom OpenAI-compatible endpoint. User settings only, so a project can't redirect your key."
+        },
+        "ideaToCode.models.tiers": {
+          "type": "object",
+          "default": {},
+          "scope": "application",
+          "description": "The main and small model chosen for each provider."
+        },
         "ideaToCode.planFiles.openAs": {
           "type": "string",
           "enum": [
@@ -167,8 +208,14 @@
     "test:ext": "tsx scripts/run-ext-tests.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.93",
+    "@ai-sdk/google": "4.0.109",
+    "@ai-sdk/openai": "4.0.106",
+    "@ai-sdk/openai-compatible": "3.0.82",
     "@idea-to-code/core": "workspace:*",
-    "@idea-to-code/store": "workspace:*"
+    "@idea-to-code/store": "workspace:*",
+    "ai": "7.0.158",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@idea-to-code/webview": "workspace:*",

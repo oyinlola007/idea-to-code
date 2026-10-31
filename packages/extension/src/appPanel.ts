@@ -1,4 +1,5 @@
 // The app tab: one per window, restored after a reload by the serializer.
+import type { HostMessage } from '@idea-to-code/core';
 import * as vscode from 'vscode';
 import type { ProjectHost } from './projectHost.js';
 import { connectWebview, type WebviewConnection, type WebviewEvents } from './webviewConnection.js';
@@ -59,10 +60,18 @@ export class AppPanel {
 
   /** Shows the tab with the history panel open. */
   showHistory(session?: string): void {
+    this.deliver({ type: 'show-history', ...(session === undefined ? {} : { session }) });
+  }
+
+  showModelSettings(): void {
+    this.deliver({ type: 'show-model-settings' });
+  }
+
+  private deliver(message: HostMessage): void {
     // A hidden tab reloads when revealed, and a new one is still loading, so neither is listening yet.
     const listening = this.panel?.visible === true;
     this.show();
-    this.connection?.showHistory(session, !listening);
+    this.connection?.deliver(message, !listening);
   }
 
   close(): void {

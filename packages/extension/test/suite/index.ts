@@ -5,8 +5,11 @@ import { appendFile, mkdir, readdir, readFile, stat, symlink, writeFile } from '
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import type { ExtensionApi } from '../../src/extension.js';
+import { OwnKeyProvider } from '../../src/models/ownKey.js';
+import { ModelError, type ChatEvent, type ChatRequest } from '../../src/models/provider.js';
 import { VsCodePlanFiles } from '../../src/vscodePlanFiles.js';
 import type { ChartRendered } from '../../src/webviewConnection.js';
+import { startFakeModelServer } from './fakeModelServer.js';
 
 const failures: string[] = [];
 
@@ -100,11 +103,86 @@ function noWebviewErrors(api: ExtensionApi): void {
   check(api.events.errors.length === 0, `webview reported: ${api.events.errors.join(' | ')}`);
 }
 
+async function collect(events: AsyncIterable<ChatEvent>): Promise<ChatEvent[]> {
+  const out: ChatEvent[] = [];
+  for await (const event of events) out.push(event);
+  return out;
+}
+
 async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string): Promise<void> {
   const map = vscode.Uri.joinPath(rootUri, 'plan', 'map.yaml');
   const bookings = vscode.Uri.joinPath(rootUri, 'plan', 'features', 'bookings.yaml');
   const bookingsPath = join(root, 'plan', 'features', 'bookings.yaml');
   const files = new VsCodePlanFiles(rootUri);
+
+  await step(`the AI SDK streams in this editor's runtime (Node ${process.version})`, async () => {
+    const key = 'sk-test-secret-value';
+    const server = await startFakeModelServer(key);
+    try {
+      const request: ChatRequest = { model: 'fake', system: 'Be brief.', messages: [{ role: 'user', text: 'Hi' }], tools: [] };
+      const provider = new OwnKeyProvider({ provider: 'custom', key, baseUrl: server.baseUrl });
+      const text = await collect(provider.chat(request));
+      check(text.flatMap((e) => (e.type === 'text' ? [e.text] : [])).join('') === 'OK', `text: ${JSON.stringify(text)}`);
+      check(text.at(-1)?.type === 'finish', 'no finish event');
+      check(server.authorizations[0] === `Bearer ${key}`, 'the key was not sent');
+
+      const tools = [
+        { name: 'add_feature', description: 'Add a feature', inputSchema: { type: 'object', properties: { label: { type: 'string' } } } },
+      ];
+      const calls = await collect(provider.chat({ ...request, tools }));
+      const call = calls.find((e) => e.type === 'tool-call');
+      check(
+        call?.type === 'tool-call' && call.call.name === 'add_feature' && JSON.stringify(call.call.input) === '{"label":"Fees"}',
+        `calls: ${JSON.stringify(calls)}`,
+      );
+
+      const wrong = new OwnKeyProvider({ provider: 'custom', key: 'sk-wrong-secret', baseUrl: server.baseUrl });
+      const rejected = await collect(wrong.chat(request)).catch((err: unknown) => err);
+      check(rejected instanceof ModelError && rejected.code === 'key-rejected', `rejected: ${String(rejected)}`);
+      check(rejected instanceof Error && !rejected.message.includes('sk-wrong-secret'), 'the key is in the error');
+    } finally {
+      await server.close();
+    }
+  });
+
+  await step('model settings: the fallback, keys in secret storage, a real connection test, user-level settings only', async () => {
+    const key = 'sk-test-secret-value';
+    const server = await startFakeModelServer(key);
+    const { service } = api.host.models;
+    try {
+      const fresh = await service.view();
+      // None of the test profiles has Copilot, so every editor here must offer the own-key route.
+      check(fresh.source === 'key' && fresh.editorModels.length === 0, `fallback: ${JSON.stringify(fresh.source)}`);
+
+      await service.update({ provider: 'custom', baseUrl: server.baseUrl, large: 'fake', small: 'missing' });
+      await service.saveKey('custom', key);
+      const saved = await service.view();
+      check(saved.providers.find((p) => p.id === 'custom')?.hasKey === true, 'the key was not saved');
+      check(!JSON.stringify(saved).includes(key), 'the key reached the view');
+      const onDisk = await readFile(join(rootUri.fsPath, '.vscode', 'settings.json'), 'utf8').catch(() => '');
+      check(!onDisk.includes(key) && !onDisk.includes('ideaToCode.models'), 'model settings reached the workspace');
+
+      const [large, small] = await service.test();
+      check(large?.ok === true && large.model === 'fake', `large: ${JSON.stringify(large)}`);
+      check(small?.ok === false && small.message?.includes("doesn't have this model") === true, `small: ${JSON.stringify(small)}`);
+      check(server.authorizations[0] === `Bearer ${key}`, 'the key did not reach its endpoint');
+
+      // A cloned project must not be able to send the key somewhere else.
+      const settings = vscode.workspace.getConfiguration('ideaToCode.models');
+      await settings.update('baseUrl', 'http://attacker.example/v1', vscode.ConfigurationTarget.Workspace).then(
+        () => undefined,
+        () => undefined,
+      );
+      check((await service.view()).baseUrl === server.baseUrl, 'a workspace setting changed the address');
+
+      await service.removeKey('custom');
+      check((await service.view()).providers.find((p) => p.id === 'custom')?.hasKey === false, 'the key was not removed');
+    } finally {
+      await server.close();
+      const settings = vscode.workspace.getConfiguration('ideaToCode.models');
+      for (const name of ['provider', 'baseUrl', 'tiers']) await settings.update(name, undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
 
   await step('finds the plan and summarizes it', async () => {
     await until('a plan', () => api.host.state.kind === 'plan');

@@ -1,7 +1,17 @@
 // The plan viewer: a toolbar, the chart for the current level, the details panel
 // and the problems banner. Moving around stays simple here; ITC-12 adds history,
 // the breadcrumb and transitions. The host only supplies the model.
-import { OVERVIEW, type AppState, type EditResult, type HistoryView, type Level, type ViewModel, type VNode } from '@idea-to-code/core';
+import {
+  OVERVIEW,
+  type AppState,
+  type EditResult,
+  type HistoryView,
+  type Level,
+  type ModelSettingsView,
+  type ModelTestResult,
+  type ViewModel,
+  type VNode,
+} from '@idea-to-code/core';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { finishEdit, loadSaved, log, onHostMessage, save, send, sendEdit, sendRestore, sendUndo } from './bridge.js';
@@ -15,6 +25,7 @@ import { Breadcrumb } from './ui/Breadcrumb.js';
 import { DetailsPanel } from './ui/DetailsPanel.js';
 import type { Edit } from './ui/edits.js';
 import { HistoryPanel } from './ui/HistoryPanel.js';
+import { ModelSettingsPanel } from './ui/ModelSettingsPanel.js';
 import { TextForm } from './ui/TextForm.js';
 import { ProgressRing, progressText } from './ui/ProgressRing.js';
 
@@ -98,6 +109,8 @@ interface ToolbarProps {
   historyOpen: boolean;
   onToggleHistory: () => void;
   onUndo: () => void;
+  settingsOpen: boolean;
+  onToggleSettings: () => void;
 }
 
 /** Adds a feature on the overview, or a step or decision inside a flow. */
@@ -169,7 +182,20 @@ function AddButton({ level, onAdd }: { level: Level; onAdd: ToolbarProps['onAdd'
   );
 }
 
-function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd, history, historyOpen, onToggleHistory, onUndo }: ToolbarProps) {
+function Toolbar({
+  level,
+  nav,
+  canEdit,
+  onHistory,
+  onGo,
+  onAdd,
+  history,
+  historyOpen,
+  onToggleHistory,
+  onUndo,
+  settingsOpen,
+  onToggleSettings,
+}: ToolbarProps) {
   const { done, total } = level.progress;
   return (
     <header className="toolbar">
@@ -224,6 +250,16 @@ function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd, history, history
             >
               <span className="codicon codicon-history" aria-hidden="true" />
             </button>
+            <button
+              type="button"
+              className="icon-button"
+              title="Model settings"
+              aria-label="Model settings"
+              aria-pressed={settingsOpen}
+              onClick={onToggleSettings}
+            >
+              <span className="codicon codicon-settings-gear" aria-hidden="true" />
+            </button>
           </>
         )}
         {level.depth > 0 && (
@@ -267,6 +303,11 @@ interface ViewerProps {
   history: HistoryView | null;
   historyPanel: HistoryRequest | null;
   onHistoryPanel: (panel: HistoryRequest | null) => void;
+  settingsOpen: boolean;
+  onSettingsOpen: (open: boolean) => void;
+  modelSettings: ModelSettingsView | null;
+  modelTest: ModelTestResult[] | 'running' | null;
+  onModelTest: () => void;
 }
 
 function Viewer({
@@ -280,6 +321,11 @@ function Viewer({
   history: planHistory,
   historyPanel,
   onHistoryPanel,
+  settingsOpen,
+  onSettingsOpen,
+  modelSettings,
+  modelTest,
+  onModelTest,
 }: ViewerProps) {
   const [layouter, setLayouter] = useState<Layouter | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -398,7 +444,8 @@ function Viewer({
         void undo();
       } else if (event.key === 'Escape') {
         event.preventDefault();
-        if (historyPanel) onHistoryPanel(null);
+        if (settingsOpen) onSettingsOpen(false);
+        else if (historyPanel) onHistoryPanel(null);
         else if (nav.details || nav.selected !== null) dispatch({ type: 'escape' });
         else if (parent !== null) void goOut(parent);
       } else if (event.key === 'Enter' && selectedNode && !(event.target instanceof HTMLButtonElement)) {
@@ -425,7 +472,7 @@ function Viewer({
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('mouseup', onMouse);
     };
-  }, [nav, parent, selectedNode, dispatch, goOut, open, history, undo, historyPanel, onHistoryPanel]);
+  }, [nav, parent, selectedNode, dispatch, goOut, open, history, undo, historyPanel, onHistoryPanel, settingsOpen, onSettingsOpen]);
 
   const onRendered = useCallback(
     (info: RenderInfo) => {
@@ -438,11 +485,14 @@ function Viewer({
   }, []);
   const onSelect = useCallback(
     (id: string | null) => {
-      // A card's details and the history share the same spot; clicking a card asks for the details.
-      if (id !== null) onHistoryPanel(null);
+      // A card's details share their spot with the other panels; clicking a card asks for the details.
+      if (id !== null) {
+        onHistoryPanel(null);
+        onSettingsOpen(false);
+      }
       dispatch({ type: 'select', id });
     },
-    [dispatch, onHistoryPanel],
+    [dispatch, onHistoryPanel, onSettingsOpen],
   );
   const onOpen = useCallback(
     (node: VNode) => {
@@ -506,6 +556,10 @@ function Viewer({
         onUndo={() => {
           void undo();
         }}
+        settingsOpen={settingsOpen}
+        onToggleSettings={() => {
+          onSettingsOpen(!settingsOpen);
+        }}
         onAdd={(type, label) => {
           void onAdd(type, label);
         }}
@@ -547,7 +601,7 @@ function Viewer({
           layouter={layouter}
           measure={measure}
           selected={selectedNode?.id ?? null}
-          panelOpen={nav.details || historyPanel !== null}
+          panelOpen={nav.details || historyPanel !== null || settingsOpen}
           emptyText={emptyText(model, level, trusted)}
           entry={entry}
           onSelect={onSelect}
@@ -567,7 +621,17 @@ function Viewer({
             }}
           />
         )}
-        {!historyPanel && nav.details && selectedNode && (
+        {settingsOpen && (
+          <ModelSettingsPanel
+            view={modelSettings}
+            test={modelTest}
+            onTest={onModelTest}
+            onClose={() => {
+              onSettingsOpen(false);
+            }}
+          />
+        )}
+        {!historyPanel && !settingsOpen && nav.details && selectedNode && (
           <DetailsPanel
             key={selectedNode.id}
             node={selectedNode}
@@ -604,6 +668,26 @@ export function App() {
   const [nav, setNav] = useState<NavState>(() => restoreNav(loadSaved()) ?? initialNav());
   const [entry, setEntry] = useState<Entry>({ kind: 'fade' });
   const [historyPanel, setHistoryPanel] = useState<HistoryRequest | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [modelSettings, setModelSettings] = useState<ModelSettingsView | null>(null);
+  const [modelTest, setModelTest] = useState<ModelTestResult[] | 'running' | null>(null);
+
+  // These share one spot on the page.
+  const openHistory = useCallback((panel: HistoryRequest | null) => {
+    setHistoryPanel(panel);
+    if (panel) setSettingsOpen(false);
+  }, []);
+  const openSettings = useCallback((open: boolean) => {
+    setSettingsOpen(open);
+    if (open) {
+      setHistoryPanel(null);
+      send({ type: 'model-settings-get' });
+    }
+  }, []);
+  const runModelTest = useCallback(() => {
+    setModelTest('running');
+    send({ type: 'model-test' });
+  }, []);
 
   const latest = useRef<ViewModel | null>(null);
   const latestModel = useCallback(() => latest.current, []);
@@ -623,7 +707,21 @@ export function App() {
         return;
       }
       if (message.type === 'show-history') {
-        setHistoryPanel(message.session === undefined ? {} : { session: message.session });
+        openHistory(message.session === undefined ? {} : { session: message.session });
+        return;
+      }
+      if (message.type === 'show-model-settings') {
+        openSettings(true);
+        return;
+      }
+      if (message.type === 'model-settings') {
+        setModelSettings(message.view);
+        // A result says nothing about settings that have since changed.
+        setModelTest((test) => (test === 'running' ? test : null));
+        return;
+      }
+      if (message.type === 'model-test-result') {
+        setModelTest(message.results);
         return;
       }
       setState(message.state);
@@ -641,7 +739,7 @@ export function App() {
     });
     send({ type: 'ready' });
     return stop;
-  }, []);
+  }, [openHistory, openSettings]);
 
   useEffect(() => {
     if (!state) return;
@@ -677,7 +775,12 @@ export function App() {
           latestModel={latestModel}
           history={state.history}
           historyPanel={historyPanel}
-          onHistoryPanel={setHistoryPanel}
+          onHistoryPanel={openHistory}
+          settingsOpen={settingsOpen}
+          onSettingsOpen={openSettings}
+          modelSettings={modelSettings}
+          modelTest={modelTest}
+          onModelTest={runModelTest}
         />
       ) : (
         <NoPlan trusted={state.trusted} />

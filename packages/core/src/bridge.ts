@@ -115,6 +115,57 @@ export const EditResult = z.strictObject({
 });
 export type EditResult = z.infer<typeof EditResult>;
 
+export const ModelTier = z.enum(['large', 'small']);
+export type ModelTier = z.infer<typeof ModelTier>;
+
+const SuggestedModel = z.strictObject({
+  id: z.string(),
+  /** Passed the built-in agent check. */
+  tested: z.boolean(),
+});
+
+/** Everything the settings view shows. It says whether a key is saved, and never holds one. */
+export const ModelSettingsView = z.strictObject({
+  /** What's in use: "key" whenever the editor has no models, whatever was chosen before. */
+  source: z.enum(['editor', 'key']),
+  editorModels: z.array(z.strictObject({ id: z.string(), label: z.string() })),
+  provider: z.string(),
+  providers: z.array(
+    z.strictObject({
+      id: z.string(),
+      label: z.string(),
+      keyRequired: z.boolean(),
+      hasKey: z.boolean(),
+      large: z.array(SuggestedModel),
+      small: z.array(SuggestedModel),
+    }),
+  ),
+  baseUrl: z.string(),
+  baseUrlProblem: z.string().optional(),
+  /** A saved key would travel over plain http to another machine. */
+  sendsKeyInClear: z.boolean().optional(),
+  large: z.string(),
+  small: z.string(),
+});
+export type ModelSettingsView = z.infer<typeof ModelSettingsView>;
+
+export const ModelSettingsPatch = z.strictObject({
+  source: z.enum(['editor', 'key']).optional(),
+  provider: z.string().max(50).optional(),
+  baseUrl: z.string().max(2000).optional(),
+  large: z.string().max(200).optional(),
+  small: z.string().max(200).optional(),
+});
+export type ModelSettingsPatch = z.infer<typeof ModelSettingsPatch>;
+
+export const ModelTestResult = z.strictObject({
+  tier: ModelTier,
+  model: z.string(),
+  ok: z.boolean(),
+  message: z.string().optional(),
+});
+export type ModelTestResult = z.infer<typeof ModelTestResult>;
+
 export const HostMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('state'), state: AppState }),
   /** Show this level, e.g. the feature whose file was opened. */
@@ -122,6 +173,9 @@ export const HostMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('edit-result'), requestId: z.number().int(), result: EditResult }),
   /** Open the history panel, at a session if one is given. */
   z.strictObject({ type: z.literal('show-history'), session: z.string().optional() }),
+  z.strictObject({ type: z.literal('show-model-settings') }),
+  z.strictObject({ type: z.literal('model-settings'), view: ModelSettingsView }),
+  z.strictObject({ type: z.literal('model-test-result'), results: z.array(ModelTestResult) }),
 ]);
 export type HostMessage = z.infer<typeof HostMessage>;
 
@@ -143,6 +197,11 @@ export const WebviewMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('edit'), requestId: z.number().int(), name: UiOperation, input: z.unknown() }),
   z.strictObject({ type: z.literal('restore'), requestId: z.number().int(), snapshotId: z.string().max(100) }),
   z.strictObject({ type: z.literal('undo'), requestId: z.number().int(), latest: z.string().max(100) }),
+  z.strictObject({ type: z.literal('model-settings-get') }),
+  z.strictObject({ type: z.literal('model-settings-set'), patch: ModelSettingsPatch }),
+  /** Asks the host to prompt for a key, in the editor's own box. A key never comes from the page. */
+  z.strictObject({ type: z.literal('model-key'), provider: z.string().max(50), action: z.enum(['set', 'remove']) }),
+  z.strictObject({ type: z.literal('model-test') }),
   z.strictObject({ type: z.literal('init-plan') }),
   z.strictObject({ type: z.literal('open-source'), file: z.string().max(500), line: z.number().int().min(1) }),
 ]);

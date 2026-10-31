@@ -996,11 +996,13 @@ body.vscode-high-contrast-light .ring__track {
 
 /* ---------- History ---------- */
 
-.history {
+.history,
+.models {
   padding-top: 0;
 }
-/* The way out stays in reach down a long list. */
-.history .details__header {
+/* The way out stays in reach down a long panel. */
+.history .details__header,
+.models .details__header {
   position: sticky;
   top: 0;
   margin-bottom: 0;
@@ -1093,6 +1095,91 @@ body.vscode-high-contrast-light .ring__track {
   margin: 14px 0 0;
   font-size: 12px;
   color: var(--itc-muted);
+}
+
+/* ---------- Model settings ---------- */
+
+.models__notice {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--itc-accent);
+  background: var(--itc-hover);
+  font-size: 12px;
+  line-height: 17px;
+}
+.models__group {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+}
+.models__group > legend,
+.models__label {
+  display: block;
+  margin-bottom: 4px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.models__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 17px;
+}
+.models__field {
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border, var(--itc-border));
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 12px;
+}
+select.models__field {
+  border-color: var(--vscode-dropdown-border, var(--itc-border));
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+}
+.models__hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--itc-muted);
+}
+.models__tested {
+  color: var(--vscode-testing-iconPassed, var(--itc-fg));
+}
+.models__warning {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--vscode-editorWarning-foreground, var(--itc-fg));
+}
+.models__key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 12px;
+}
+.models__test {
+  margin-top: 16px;
+}
+.models__results {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 17px;
+}
+.models__results li {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Editing ---------- */
