@@ -54,6 +54,7 @@ describe('bridge messages', () => {
       { type: 'ready' },
       { type: 'log', level: 'error', message: 'boot: failed' },
       { type: 'rendered', kind: 'plan', features: 5, problems: 3 },
+      { type: 'level', level: 'bookings' },
       { type: 'init-plan' },
       { type: 'open-source', file: 'plan/map.yaml', line: 3 },
     ]) {

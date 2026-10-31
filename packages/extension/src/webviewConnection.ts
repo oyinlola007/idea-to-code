@@ -99,6 +99,9 @@ export function connectWebview(
             `rendered ${message.level}: ${String(message.nodes)} nodes, ${String(message.width)}px wide, ${message.layoutMs.toFixed(0)}ms via ${message.workerMode}`,
           );
           break;
+        case 'level':
+          await host.publishLevel(message.level);
+          break;
         case 'init-plan':
           await vscode.commands.executeCommand('ideaToCode.initPlan');
           break;

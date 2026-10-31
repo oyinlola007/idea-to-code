@@ -4,6 +4,7 @@ import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PlanNode, type PlanFlowNode } from '../src/chart/nodes.js';
+import { Breadcrumb } from '../src/ui/Breadcrumb.js';
 import { kindIcon, kindLabel } from '../src/chart/icons.js';
 import { approxMeasure, nodeBox } from '../src/layout/metrics.js';
 import { progressText } from '../src/ui/ProgressRing.js';
@@ -11,7 +12,7 @@ import { progressText } from '../src/ui/ProgressRing.js';
 const source = { file: 'plan/features/bookings.yaml', line: 3 };
 
 function card(node: VNode): string {
-  const data = { node, box: nodeBox(node, approxMeasure), dimmed: false, onOpen: () => undefined };
+  const data = { node, box: nodeBox(node, approxMeasure), dimmed: false, arrived: false, onOpen: () => undefined };
   const props = { id: node.id, data, selected: false } as unknown as NodeProps<PlanFlowNode>;
   return renderToStaticMarkup(
     <ReactFlowProvider>
@@ -87,6 +88,32 @@ describe('cards', () => {
     });
     expect(shared).toContain('Shared external api');
     expect(card({ id: 'c', kind: 'reference', label: 'Lost', source })).toContain('Unresolved reference');
+  });
+});
+
+describe('breadcrumb', () => {
+  const crumb = (id: string) => ({ id, title: `Title ${id}` });
+  const render = (ids: string[]) => renderToStaticMarkup(<Breadcrumb crumbs={ids.map(crumb)} onGo={() => undefined} />);
+
+  it('links every level above the current one, starting at the overview', () => {
+    const html = render(['overview', 'a', 'b']);
+    expect(html.match(/crumbs__link/g)).toHaveLength(2);
+    expect(html).toContain('aria-current="page"');
+    expect(html.indexOf('Title overview')).toBeLessThan(html.indexOf('Title a'));
+    expect(html.indexOf('Title a')).toBeLessThan(html.indexOf('Title b'));
+  });
+
+  it('has no links on the overview itself', () => {
+    expect(render(['overview'])).not.toContain('crumbs__link');
+  });
+
+  it('collapses the middle of a long path but keeps the overview reachable', () => {
+    const html = render(['overview', 'a', 'b', 'c', 'd']);
+    expect(html).toContain('…');
+    expect(html).toContain('title="Title a › Title b"');
+    expect(html).toContain('Title overview');
+    expect(html).toContain('Title c');
+    expect(html).toContain('Title d');
   });
 });
 
