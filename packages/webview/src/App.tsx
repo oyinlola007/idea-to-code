@@ -117,7 +117,7 @@ function Toolbar({ level, nav, onHistory, onGo }: ToolbarProps) {
           <span className="codicon codicon-arrow-right" aria-hidden="true" />
         </button>
       </div>
-      <Breadcrumb crumbs={level.crumbs} onGo={onGo} />
+      <Breadcrumb key={level.id} crumbs={level.crumbs} onGo={onGo} />
       <div className="toolbar__meta">
         {level.depth > 0 && (
           <span className="depth" title={`${String(level.depth)} level${level.depth > 1 ? 's' : ''} below the overview`}>
