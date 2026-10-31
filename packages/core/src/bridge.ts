@@ -41,10 +41,39 @@ export const AppState = z.discriminatedUnion('kind', [
 ]);
 export type AppState = z.infer<typeof AppState>;
 
+/** The plan edits the UI may ask for. */
+export const UiOperation = z.enum([
+  'add_feature',
+  'update_feature',
+  'remove_feature',
+  'update_component',
+  'remove_component',
+  'connect_features',
+  'disconnect_features',
+  'add_node',
+  'update_node',
+  'set_status',
+  'remove_node',
+  'add_edge',
+  'remove_edge',
+  'fill_flow',
+]);
+export type UiOperation = z.infer<typeof UiOperation>;
+
+export const EditResult = z.strictObject({
+  ok: z.boolean(),
+  /** Why it was refused. */
+  message: z.string().optional(),
+  /** IDs of what was created. */
+  created: z.record(z.string(), z.string()).optional(),
+});
+export type EditResult = z.infer<typeof EditResult>;
+
 export const HostMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('state'), state: AppState }),
   /** Show this level, e.g. the feature whose file was opened. */
   z.strictObject({ type: z.literal('show-level'), level: z.string() }),
+  z.strictObject({ type: z.literal('edit-result'), requestId: z.number().int(), result: EditResult }),
 ]);
 export type HostMessage = z.infer<typeof HostMessage>;
 
@@ -63,6 +92,7 @@ export const WebviewMessage = z.discriminatedUnion('type', [
   }),
   /** The level this tab is showing, for agents to read. */
   z.strictObject({ type: z.literal('level'), level: z.string().max(500) }),
+  z.strictObject({ type: z.literal('edit'), requestId: z.number().int(), name: UiOperation, input: z.unknown() }),
   z.strictObject({ type: z.literal('init-plan') }),
   z.strictObject({ type: z.literal('open-source'), file: z.string().max(500), line: z.number().int().min(1) }),
 ]);

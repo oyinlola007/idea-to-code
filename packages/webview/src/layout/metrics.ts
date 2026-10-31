@@ -53,6 +53,7 @@ export function wrap(text: string, font: Parameters<Measure>[1], maxWidth: numbe
 function hasMeta(n: VNode): boolean {
   return (
     n.opens !== undefined ||
+    n.broken === true ||
     n.planned === true ||
     n.status !== undefined ||
     n.tech !== undefined ||

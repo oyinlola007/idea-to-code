@@ -989,3 +989,199 @@ body.vscode-high-contrast-light .ring__track {
     transition: none !important;
   }
 }
+
+/* ---------- Editing ---------- */
+
+.text-form {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 3px 6px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--itc-border-strong));
+  border-radius: 3px;
+  font: inherit;
+  outline: none;
+}
+.text-form:focus {
+  border-color: var(--itc-accent);
+}
+.add-form {
+  width: 220px;
+}
+.add-form__choice {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.add-form__choice .button {
+  padding: 2px 8px;
+}
+.details__rename {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+.details__rename .codicon {
+  font-size: 12px;
+  color: var(--itc-muted);
+  opacity: 0;
+}
+.details__rename:hover .codicon,
+.details__rename:focus-visible .codicon {
+  opacity: 1;
+}
+.details__title-input {
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-choice {
+  display: flex;
+  margin-bottom: 12px;
+  border: 1px solid var(--itc-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.status-choice__option {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 4px;
+  border: 0;
+  color: var(--itc-muted);
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.status-choice__option + .status-choice__option {
+  border-left: 1px solid var(--itc-border);
+}
+.status-choice__option:hover {
+  background: var(--itc-hover);
+}
+.status-choice__option[aria-pressed='true'] {
+  color: var(--itc-fg);
+  background: var(--itc-hover);
+  font-weight: 600;
+}
+.flow-remove {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  opacity: 0.6;
+}
+.flow-remove:hover,
+.flow-remove:focus-visible {
+  opacity: 1;
+}
+.details__connect {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 3px 4px;
+  color: var(--vscode-dropdown-foreground, var(--itc-fg));
+  background: var(--vscode-dropdown-background, var(--itc-card));
+  border: 1px solid var(--vscode-dropdown-border, var(--itc-border-strong));
+  border-radius: 3px;
+  font: inherit;
+}
+.details__first-step {
+  align-self: flex-start;
+  margin-bottom: 12px;
+}
+.details__actions {
+  flex-wrap: wrap;
+}
+.button--danger {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-errorForeground);
+}
+.edit-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  color: var(--vscode-errorForeground);
+  border-bottom: 1px solid var(--itc-border);
+}
+.edit-error > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Problems on the chart ---------- */
+
+.card__problem {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  line-height: 1;
+}
+.card__problem--error {
+  color: var(--vscode-errorForeground);
+}
+.card__problem--warning {
+  color: var(--vscode-editorWarning-foreground);
+}
+.card.card--has-error {
+  border-color: var(--vscode-errorForeground);
+}
+.card.card--has-warning {
+  border-color: var(--vscode-editorWarning-foreground);
+}
+.meta__broken {
+  color: var(--vscode-errorForeground);
+}
+.details__problems {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.details__problem {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.details__problem--error .codicon {
+  color: var(--vscode-errorForeground);
+}
+.details__problem--warning .codicon {
+  color: var(--vscode-editorWarning-foreground);
+}
+.issues__item .codicon {
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.details__flows li {
+  position: relative;
+  padding-right: 24px;
+}
+.flow-remove {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  margin: 0;
+}
+.details__flows {
+  margin-bottom: 12px;
+}
+.details__branch {
+  margin-top: 6px;
+}

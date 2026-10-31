@@ -55,6 +55,7 @@ describe('bridge messages', () => {
       { type: 'log', level: 'error', message: 'boot: failed' },
       { type: 'rendered', kind: 'plan', features: 5, problems: 3 },
       { type: 'level', level: 'bookings' },
+      { type: 'edit', requestId: 1, name: 'set_status', input: { id: 'a', status: 'done' } },
       { type: 'init-plan' },
       { type: 'open-source', file: 'plan/map.yaml', line: 3 },
     ]) {
@@ -73,11 +74,18 @@ describe('bridge messages', () => {
       { type: 'chart-rendered', level: 'overview', nodes: 1, width: 1, height: 1, layoutMs: 1, workerMode: 'url' },
       { type: 'log', level: 'info', message: 'x'.repeat(2001) },
       { type: 'open-source', file: 'plan/map.yaml', line: 0 },
+      { type: 'edit', requestId: 1, name: 'expand_node', input: {} },
+      { type: 'edit', name: 'set_status', input: {} },
       { type: 'open-source', file: 'plan/map.yaml' },
     ]) {
       expect(WebviewMessage.safeParse(m).success, JSON.stringify(m)).toBe(false);
     }
-    for (const m of [{}, { type: 'state' }, { type: 'state', state: { kind: 'plan', trusted: true } }]) {
+    for (const m of [
+      {},
+      { type: 'state' },
+      { type: 'state', state: { kind: 'plan', trusted: true } },
+      { type: 'edit-result', requestId: 1, result: {} },
+    ]) {
       expect(HostMessage.safeParse(m).success, JSON.stringify(m)).toBe(false);
     }
     expect(AppState.safeParse({ kind: 'no-plan', trusted: 'yes' }).success).toBe(false);

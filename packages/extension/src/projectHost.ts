@@ -1,7 +1,7 @@
 // The workspace's plan, as the rest of the extension sees it: which folder, what it
 // says, and (when trusted) the ProjectService behind it. Every change takes one path,
 // refresh(), so the sidebar, tabs and Problems panel can't disagree.
-import { buildViewModel, loadFromTexts, summarizePlan, type AppState } from '@idea-to-code/core';
+import { buildViewModel, loadFromTexts, summarizePlan, type AppState, type EditResult, type UiOperation } from '@idea-to-code/core';
 import { appDataDir, HistoryStore, ProjectService, type PlanFiles } from '@idea-to-code/store';
 import { homedir } from 'node:os';
 import * as vscode from 'vscode';
@@ -66,6 +66,14 @@ export class ProjectHost implements vscode.Disposable {
   planFile(uri: vscode.Uri): string | undefined {
     if (this.folder?.uri.scheme !== uri.scheme) return undefined;
     return planFileIn(this.folder.uri.path, uri.path);
+  }
+
+  /** One edit from the UI, recorded in history. The chart has the result by the time this answers. */
+  async applyEdit(name: UiOperation, input: unknown): Promise<EditResult> {
+    if (!this.trust.isTrusted || !this.serviceInstance) return { ok: false, message: 'This plan is view-only until you trust the folder.' };
+    const result = await this.serviceInstance.apply({ name, input }, { source: 'ui', actor: 'user' });
+    await this.refresh();
+    return result.ok ? { ok: true, created: result.created } : { ok: false, message: result.message };
   }
 
   /** Records the level being looked at, for agents. In Restricted Mode nothing is recorded. */

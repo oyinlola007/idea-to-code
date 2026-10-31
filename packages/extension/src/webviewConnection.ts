@@ -99,6 +99,9 @@ export function connectWebview(
             `rendered ${message.level}: ${String(message.nodes)} nodes, ${String(message.width)}px wide, ${message.layoutMs.toFixed(0)}ms via ${message.workerMode}`,
           );
           break;
+        case 'edit':
+          post({ type: 'edit-result', requestId: message.requestId, result: await host.applyEdit(message.name, message.input) });
+          break;
         case 'level':
           await host.publishLevel(message.level);
           break;

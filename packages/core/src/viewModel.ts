@@ -2,7 +2,7 @@
 // with parents, progress and source lines resolved here so the webview only draws.
 // The schemas are the source of truth: both sides of the bridge parse with them.
 import { z } from 'zod';
-import { positionOf, type LoadedFile, type Project } from './load.js';
+import { featurePath, positionOf, type LoadedFile, type Project } from './load.js';
 import { flowProgress, OVERVIEW } from './progress.js';
 import { nodeLabel, type PlanNode } from './schema.js';
 import { indexProject, MAIN, validateProject, type ProjectIndex } from './validate.js';
@@ -32,6 +32,10 @@ const VNode = z.strictObject({
   progress: ProgressCount.optional(),
   /** An overview feature that has no flows yet. */
   planned: z.boolean().optional(),
+  /** A feature whose file can't be read, so its flows can't be shown. */
+  broken: z.boolean().optional(),
+  /** What the validator says about this node's lines. */
+  problems: z.array(z.strictObject({ severity: z.enum(['error', 'warning']), message: z.string() })).optional(),
   source: SourcePos,
 });
 export type VNode = z.infer<typeof VNode>;
@@ -81,6 +85,59 @@ export type ViewModel = z.infer<typeof ViewModel>;
 function pos(file: LoadedFile<unknown> | null, path: readonly PropertyKey[]): SourcePos {
   if (!file) return { file: 'plan/map.yaml', line: 1 };
   return { file: file.path, line: positionOf(file, path).line };
+}
+
+/** The last line of the entry at `path`, for telling which node an issue belongs to. */
+function endLine(file: LoadedFile<unknown>, path: readonly PropertyKey[]): number {
+  const node = file.doc.getIn(path as unknown[], true) as { range?: [number, number, number] | null } | undefined;
+  const end = node?.range?.[1];
+  return end === undefined ? positionOf(file, path).line : file.lineCounter.linePos(end).line;
+}
+
+/** Marks each node with the issues inside its lines, the narrowest match when nodes nest. */
+function attachProblems(project: Project, levels: Record<LevelId, Level>, issues: ViewModel['issues']): void {
+  const spans = new Map<string, { node: VNode; start: number; end: number }[]>();
+  const add = (file: LoadedFile<unknown> | null | undefined, node: VNode, path: readonly PropertyKey[]) => {
+    if (!file) return;
+    spans.set(file.path, [...(spans.get(file.path) ?? []), { node, start: positionOf(file, path).line, end: endLine(file, path) }]);
+  };
+  for (const level of Object.values(levels)) {
+    level.nodes.forEach((node) => {
+      const file = node.source.file === project.map?.path ? project.map : project.features.find((f) => f.path === node.source.file);
+      const path = locate(file, node.id);
+      if (path) add(file, node, path);
+    });
+  }
+  const mark = (node: VNode, severity: 'error' | 'warning', message: string) => {
+    node.problems = [...(node.problems ?? []), { severity, message }];
+  };
+  const overview = levels[OVERVIEW]?.nodes ?? [];
+  for (const issue of issues) {
+    const hit = (spans.get(issue.file) ?? [])
+      .filter((span) => span.start <= issue.line && issue.line <= span.end)
+      .sort((a, b) => a.end - a.start - (b.end - b.start))[0];
+    if (hit) mark(hit.node, issue.severity, issue.message);
+    // From the overview you should be able to see which feature needs attention.
+    const match = /^plan\/features\/(.+)\.yaml$/.exec(issue.file);
+    const feature = overview.find((node) => node.kind === 'feature' && node.id === match?.[1]);
+    if (feature && feature !== hit?.node && issue.severity === 'error') mark(feature, 'error', issue.message);
+  }
+}
+
+/** Where a node with this id is written in its file. */
+function locate(file: LoadedFile<unknown> | null | undefined, id: string): PropertyKey[] | undefined {
+  const data = file?.data as
+    { features?: { id: string }[]; components?: { id: string }[]; flows?: Record<string, { nodes: { id: string }[] }> } | null | undefined;
+  if (!data) return undefined;
+  for (const key of ['features', 'components'] as const) {
+    const i = data[key]?.findIndex((entry) => entry.id === id) ?? -1;
+    if (i >= 0) return [key, i];
+  }
+  for (const [key, flow] of Object.entries(data.flows ?? {})) {
+    const i = flow.nodes.findIndex((node) => node.id === id);
+    if (i >= 0) return ['flows', key, 'nodes', i];
+  }
+  return undefined;
 }
 
 function parentOf(index: ProjectIndex, flowId: string): LevelId {
@@ -166,7 +223,14 @@ export function buildViewModel(project: Project): ViewModel {
       node.opens = f.id;
       node.progress = flowProgress(index, f.id);
     } else {
-      node.planned = true;
+      const unreadable = project.features.find((file) => file.path === featurePath(f.id) && file.data === null);
+      if (unreadable) {
+        node.broken = true;
+        // Open in YAML goes to the problem, not to the map.
+        node.source = { file: unreadable.path, line: unreadable.issues[0]?.line ?? 1 };
+      } else {
+        node.planned = true;
+      }
     }
     overviewNodes.push(node);
   });
@@ -216,12 +280,10 @@ export function buildViewModel(project: Project): ViewModel {
     levels[ref.id] = level;
   }
 
-  const issues = validateProject(project).map((i) => ({
-    file: i.file,
-    line: i.line,
-    severity: i.severity,
-    code: i.code,
-    message: i.message,
-  }));
+  // A listed feature without flows is a normal stage of planning, and its card already says so.
+  const issues = validateProject(project)
+    .filter((i) => i.code !== 'feature-without-flows')
+    .map((i) => ({ file: i.file, line: i.line, severity: i.severity, code: i.code, message: i.message }));
+  attachProblems(project, levels, issues);
   return { project: title, levels, issues };
 }

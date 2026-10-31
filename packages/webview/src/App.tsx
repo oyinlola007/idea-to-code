@@ -4,7 +4,7 @@
 import { OVERVIEW, type AppState, type Level, type ViewModel, type VNode } from '@idea-to-code/core';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadSaved, log, onHostMessage, save, send } from './bridge.js';
+import { finishEdit, loadSaved, log, onHostMessage, save, send, sendEdit } from './bridge.js';
 import { Chart, type ChartHandle, type Entry, type RenderInfo } from './chart/Chart.js';
 import { createLayouter, type Layouter } from './layout/elkClient.js';
 import { canvasMeasure } from './layout/measure.js';
@@ -13,6 +13,8 @@ import { canBack, canForward, currentLevel, initialNav, navReducer, restoreNav, 
 import './theme.css';
 import { Breadcrumb } from './ui/Breadcrumb.js';
 import { DetailsPanel } from './ui/DetailsPanel.js';
+import type { Edit } from './ui/edits.js';
+import { TextForm } from './ui/TextForm.js';
 import { ProgressRing, progressText } from './ui/ProgressRing.js';
 
 function NoPlan({ trusted }: { trusted: boolean }) {
@@ -39,7 +41,7 @@ function NoPlan({ trusted }: { trusted: boolean }) {
 
 function Problems({ model }: { model: ViewModel }) {
   const [open, setOpen] = useState(false);
-  const errors = model.issues.filter((issue) => issue.severity === 'error');
+  const errors = model.issues;
   if (errors.length === 0) return null;
   return (
     <div className={`issues${open ? ' issues--open' : ''}`} role="status">
@@ -51,7 +53,10 @@ function Problems({ model }: { model: ViewModel }) {
           setOpen((o) => !o);
         }}
       >
-        <span className="codicon codicon-warning" aria-hidden="true" />
+        <span
+          className={`codicon codicon-${errors.some((issue) => issue.severity === 'error') ? 'error' : 'warning'}`}
+          aria-hidden="true"
+        />
         {errors.length === 1 ? '1 problem in the plan files' : `${String(errors.length)} problems in the plan files`}. The rest of the plan
         still shows.
         <span className={`codicon codicon-chevron-${open ? 'up' : 'down'}`} aria-hidden="true" />
@@ -67,6 +72,7 @@ function Problems({ model }: { model: ViewModel }) {
                   send({ type: 'open-source', file: issue.file, line: Math.max(issue.line, 1) });
                 }}
               >
+                <span className={`codicon codicon-${issue.severity}`} aria-hidden="true" />
                 <span className="issues__where">
                   {issue.file.replace(/^plan\//, '')}:{issue.line}
                 </span>
@@ -83,11 +89,82 @@ function Problems({ model }: { model: ViewModel }) {
 interface ToolbarProps {
   level: Level;
   nav: NavState;
+  canEdit: boolean;
   onHistory: (dir: 'back' | 'forward') => void;
   onGo: (level: string) => void;
+  onAdd: (type: 'feature' | 'step' | 'decision', label: string) => void;
 }
 
-function Toolbar({ level, nav, onHistory, onGo }: ToolbarProps) {
+/** Adds a feature on the overview, or a step or decision inside a flow. */
+function AddButton({ level, onAdd }: { level: Level; onAdd: ToolbarProps['onAdd'] }) {
+  const [adding, setAdding] = useState<'feature' | 'step' | 'decision' | 'choose' | null>(null);
+  const isOverview = level.id === OVERVIEW;
+  if (adding === null) {
+    return (
+      <button
+        type="button"
+        className="icon-button"
+        title={isOverview ? 'Add a feature' : 'Add a step or decision'}
+        aria-label={isOverview ? 'Add a feature' : 'Add a step or decision'}
+        onClick={() => {
+          setAdding(isOverview ? 'feature' : 'choose');
+        }}
+      >
+        <span className="codicon codicon-add" aria-hidden="true" />
+      </button>
+    );
+  }
+  return (
+    <div className="add-form">
+      {adding === 'choose' ? (
+        <div className="add-form__choice" role="group" aria-label="What to add">
+          <button
+            type="button"
+            className="button button--secondary"
+            onClick={() => {
+              setAdding('step');
+            }}
+          >
+            Step
+          </button>
+          <button
+            type="button"
+            className="button button--secondary"
+            onClick={() => {
+              setAdding('decision');
+            }}
+          >
+            Decision
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Cancel"
+            onClick={() => {
+              setAdding(null);
+            }}
+          >
+            <span className="codicon codicon-close" aria-hidden="true" />
+          </button>
+        </div>
+      ) : (
+        <TextForm
+          label={`Name of the new ${adding}`}
+          placeholder={adding === 'feature' ? 'New feature…' : adding === 'step' ? 'New step…' : 'New decision…'}
+          onSave={(text) => {
+            setAdding(null);
+            onAdd(adding, text);
+          }}
+          onCancel={() => {
+            setAdding(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd }: ToolbarProps) {
   const { done, total } = level.progress;
   return (
     <header className="toolbar">
@@ -119,6 +196,7 @@ function Toolbar({ level, nav, onHistory, onGo }: ToolbarProps) {
       </div>
       <Breadcrumb key={level.id} crumbs={level.crumbs} onGo={onGo} />
       <div className="toolbar__meta">
+        {canEdit && <AddButton key={level.id} level={level} onAdd={onAdd} />}
         {level.depth > 0 && (
           <span className="depth" title={`${String(level.depth)} level${level.depth > 1 ? 's' : ''} below the overview`}>
             Level {level.depth}
@@ -131,6 +209,13 @@ function Toolbar({ level, nav, onHistory, onGo }: ToolbarProps) {
       </div>
     </header>
   );
+}
+
+function emptyText(model: ViewModel, level: Level, canEdit: boolean): string {
+  if (level.id !== OVERVIEW) return canEdit ? 'This flow has no steps yet. Use + to add one.' : 'This flow has no steps yet.';
+  if (model.issues.some((issue) => issue.file === 'plan/map.yaml' && issue.severity === 'error'))
+    return "plan/map.yaml can't be read. Fix the problem above to see the plan.";
+  return canEdit ? 'No features yet. Use + to add one, or ask your coding agent to plan the first.' : 'No features yet.';
 }
 
 function firstMeasure(): Measure {
@@ -148,14 +233,17 @@ interface ViewerProps {
   nav: NavState;
   entry: Entry;
   onNav: (nav: (state: NavState) => NavState, entry?: Entry) => void;
+  /** The newest plan, which an edit's answer can reach before this has rendered it. */
+  latestModel: () => ViewModel | null;
 }
 
-function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
+function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: ViewerProps) {
   const [layouter, setLayouter] = useState<Layouter | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [measure] = useState<Measure>(firstMeasure);
   const chart = useRef<ChartHandle>(null);
   const busy = useRef(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
     createLayouter((mode, error) => {
@@ -169,15 +257,24 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
 
   const dispatch = useCallback(
     (action: NavAction, nextEntry?: Entry) => {
-      onNav((state) => navReducer(model)(state, action), nextEntry);
+      onNav((state) => navReducer(latestModel() ?? model)(state, action), nextEntry);
     },
-    [model, onNav],
+    [model, latestModel, onNav],
   );
 
   const levelId = currentLevel(nav);
   const level = model.levels[levelId] ?? model.levels[OVERVIEW];
   const selectedNode = level?.nodes.find((node) => node.id === nav.selected) ?? null;
   const parent = level?.parent ?? null;
+
+  const runEdit = useCallback(async (edit: Edit) => {
+    setEditError(null);
+    const result = await sendEdit(edit.name, edit.input);
+    if (!result.ok) setEditError(result.message ?? "That change couldn't be made.");
+    return result;
+  }, []);
+
+  const onEdit = useCallback(async (edit: Edit) => (await runEdit(edit)).ok, [runEdit]);
 
   /** Plays a leaving animation once, ignoring clicks while it runs. */
   const whileLeaving = useCallback(async (kind: 'in' | 'out', nodeId?: string) => {
@@ -237,6 +334,8 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Typing in a form or choosing from a list isn't navigating.
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         if (nav.details || nav.selected !== null) dispatch({ type: 'escape' });
@@ -289,6 +388,30 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
     [open],
   );
 
+  const onAdd = useCallback(
+    async (type: 'feature' | 'step' | 'decision', label: string) => {
+      if (type === 'feature') {
+        await runEdit({ name: 'add_feature', input: { label } });
+        return;
+      }
+      // Added with a card selected, it comes after that card. A decision's branches need a label, so those are connected by hand.
+      const after = selectedNode?.kind === 'decision' ? undefined : selectedNode?.id;
+      const result = await runEdit({ name: 'add_node', input: { flowId: levelId, type, label } });
+      const created = result.created?.nodeId;
+      if (result.ok && after !== undefined && created !== undefined)
+        await runEdit({ name: 'add_edge', input: { flowId: levelId, from: after, to: created } });
+    },
+    [levelId, runEdit, selectedNode],
+  );
+
+  const onFirstStep = useCallback(
+    async (node: VNode, label: string) => {
+      const result = await runEdit({ name: 'fill_flow', input: { flowId: node.id, nodes: [{ key: 'first', type: 'step', label }] } });
+      if (result.ok) dispatch({ type: 'open', level: node.id }, { kind: 'in' });
+    },
+    [dispatch, runEdit],
+  );
+
   if (fatal !== null) {
     return (
       <div className="state state--error">
@@ -311,6 +434,10 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
       <Toolbar
         level={level}
         nav={nav}
+        canEdit={trusted}
+        onAdd={(type, label) => {
+          void onAdd(type, label);
+        }}
         onHistory={(dir) => {
           void history(dir);
         }}
@@ -325,6 +452,22 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
       )}
       {level.description !== undefined && <p className="level-description">{level.description}</p>}
       <Problems model={model} />
+      {editError !== null && (
+        <div className="edit-error" role="alert">
+          <span className="codicon codicon-error" aria-hidden="true" />
+          <span>{editError}</span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Dismiss"
+            onClick={() => {
+              setEditError(null);
+            }}
+          >
+            <span className="codicon codicon-close" aria-hidden="true" />
+          </button>
+        </div>
+      )}
       <main className="stage">
         <Chart
           ref={chart}
@@ -334,6 +477,7 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
           measure={measure}
           selected={selectedNode?.id ?? null}
           panelOpen={nav.details}
+          emptyText={emptyText(model, level, trusted)}
           entry={entry}
           onSelect={onSelect}
           onOpen={onOpen}
@@ -342,8 +486,14 @@ function Viewer({ trusted, model, version, nav, entry, onNav }: ViewerProps) {
         />
         {nav.details && selectedNode && (
           <DetailsPanel
+            key={selectedNode.id}
             node={selectedNode}
             level={level}
+            canEdit={trusted}
+            onEdit={onEdit}
+            onFirstStep={(node, label) => {
+              void onFirstStep(node, label);
+            }}
             onClose={() => {
               dispatch({ type: 'closeDetails' });
             }}
@@ -366,6 +516,9 @@ export function App() {
   const [nav, setNav] = useState<NavState>(() => restoreNav(loadSaved()) ?? initialNav());
   const [entry, setEntry] = useState<Entry>({ kind: 'fade' });
 
+  const latest = useRef<ViewModel | null>(null);
+  const latestModel = useCallback(() => latest.current, []);
+
   useEffect(() => {
     let current: { model: ViewModel; json: string } | undefined;
     const stop = onHostMessage((message) => {
@@ -376,6 +529,10 @@ export function App() {
         setNav((s) => navReducer(model)(s, { type: 'open', level: message.level }));
         return;
       }
+      if (message.type === 'edit-result') {
+        finishEdit(message.requestId, message.result);
+        return;
+      }
       setState(message.state);
       if (message.state.kind !== 'plan') return;
       const { model } = message.state;
@@ -383,8 +540,9 @@ export function App() {
       if (json === current?.json) return;
       const before = current?.model;
       current = { model, json };
+      latest.current = model;
       setShown((old) => ({ model, json, version: (old?.version ?? 0) + 1 }));
-      setEntry({ kind: 'fade' });
+      setEntry({ kind: 'keep' });
       // A level or card can disappear when the plan changes.
       setNav((s) => navReducer(model, before)(s, { type: 'reconcile' }));
     });
@@ -416,7 +574,15 @@ export function App() {
   return (
     <ReactFlowProvider>
       {state.kind === 'plan' && shown ? (
-        <Viewer trusted={state.trusted} model={shown.model} version={shown.version} nav={nav} entry={entry} onNav={onNav} />
+        <Viewer
+          trusted={state.trusted}
+          model={shown.model}
+          version={shown.version}
+          nav={nav}
+          entry={entry}
+          onNav={onNav}
+          latestModel={latestModel}
+        />
       ) : (
         <NoPlan trusted={state.trusted} />
       )}

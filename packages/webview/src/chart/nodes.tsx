@@ -74,6 +74,8 @@ function Meta({ node, onOpen }: { node: VNode; onOpen: (n: VNode) => void }) {
         <span>{progressText(node.progress)}</span>
       </>
     );
+  } else if (node.broken) {
+    content = <span className="meta__broken">Can't be read</span>;
   } else if (node.planned) {
     content = <span className="meta__muted">Not planned yet</span>;
   } else if (node.kind === 'reference') {
@@ -110,12 +112,34 @@ function refText(node: VNode): string {
   return node.jumpsTo ? 'Go to flow' : 'Planned feature';
 }
 
+/** The most serious problem on a card, if any. */
+function worst(node: VNode): 'error' | 'warning' | undefined {
+  return node.problems?.find((p) => p.severity === 'error')?.severity ?? node.problems?.[0]?.severity;
+}
+
+function ProblemBadge({ node }: { node: VNode }) {
+  const severity = worst(node);
+  if (!severity) return null;
+  const messages = node.problems?.map((p) => p.message).join('\n') ?? '';
+  return (
+    <span
+      className={`card__problem card__problem--${severity}`}
+      title={messages}
+      role="img"
+      aria-label={severity === 'error' ? 'Has a problem' : 'Has a warning'}
+    >
+      <Codicon name={severity === 'error' ? 'error' : 'warning'} />
+    </span>
+  );
+}
+
 function cardClass(node: VNode, selected: boolean, data: PlanNodeData, extra = '') {
   return [
     'card',
     `card--${node.kind}`,
     node.opens ? 'card--expandable' : '',
     node.planned ? 'card--planned' : '',
+    worst(node) ? `card--has-${worst(node) ?? ''}` : '',
     node.status ? `card--${node.status}` : '',
     selected ? 'is-selected' : '',
     data.dimmed ? 'is-dimmed' : '',
@@ -134,6 +158,7 @@ export const PlanNode = memo(function PlanNode({ data, selected }: NodeProps<Pla
     return (
       <div className={cardClass(node, selected, data, 'pill')} style={size}>
         <Handles />
+        <ProblemBadge node={node} />
         <span className={`pill__dot pill__dot--${node.kind}`} aria-hidden="true" />
         <span className="pill__label">{box.title[0]}</span>
       </div>
@@ -143,6 +168,7 @@ export const PlanNode = memo(function PlanNode({ data, selected }: NodeProps<Pla
   return (
     <div className={cardClass(node, selected, data)} style={size}>
       <Handles />
+      <ProblemBadge node={node} />
       {node.kind === 'component' && (
         <div className="card__kind">
           <Codicon name={kindIcon(node.componentKind)} />

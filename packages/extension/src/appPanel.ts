@@ -17,14 +17,14 @@ export class AppPanel {
     private readonly log: vscode.LogOutputChannel,
   ) {}
 
-  private attach(panel: vscode.WebviewPanel): void {
+  private attach(panel: vscode.WebviewPanel, startLevel?: string): void {
     this.panel = panel;
     panel.iconPath = {
       light: vscode.Uri.joinPath(this.context.extensionUri, 'media', 'tab-light.svg'),
       dark: vscode.Uri.joinPath(this.context.extensionUri, 'media', 'tab-dark.svg'),
     };
     panel.webview.options = webviewOptions(this.context.extensionUri);
-    const connection = connectWebview(panel.webview, this.host, this.events, this.log);
+    const connection = connectWebview(panel.webview, this.host, this.events, this.log, startLevel);
     this.connection = connection;
     panel.webview.html = webviewHtml(panel.webview, this.context.extensionUri);
     panel.onDidDispose(() => {
@@ -34,7 +34,7 @@ export class AppPanel {
     });
   }
 
-  show(): void {
+  show(startLevel?: string): void {
     if (this.panel) {
       this.panel.reveal();
       return;
@@ -43,13 +43,18 @@ export class AppPanel {
       ...webviewOptions(this.context.extensionUri),
       retainContextWhenHidden: false,
     });
-    this.attach(panel);
+    this.attach(panel, startLevel);
   }
 
   /** Shows the tab at a level. */
   showLevel(level: string): void {
-    this.show();
-    this.connection?.showLevel(level);
+    // A tab that's only now opening isn't listening yet, so it starts at the level instead.
+    if (this.panel) {
+      this.panel.reveal();
+      this.connection?.showLevel(level);
+    } else {
+      this.show(level);
+    }
   }
 
   close(): void {

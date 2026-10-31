@@ -92,6 +92,49 @@ describe('cards', () => {
   });
 });
 
+describe('problem marks', () => {
+  it('marks a card with an error, with the message on hover', () => {
+    const html = card({ id: 'a', kind: 'reference', label: 'Lost', problems: [{ severity: 'error', message: 'unknown ref' }], source });
+    expect(html).toContain('card--has-error');
+    expect(html).toContain('codicon-error');
+    expect(html).toContain('title="unknown ref"');
+  });
+
+  it('shows the worse of several problems', () => {
+    const html = card({
+      id: 'a',
+      kind: 'step',
+      label: 'A',
+      problems: [
+        { severity: 'warning', message: 'w' },
+        { severity: 'error', message: 'e' },
+      ],
+      source,
+    });
+    expect(html).toContain('card--has-error');
+    expect(html).not.toContain('card--has-warning');
+  });
+
+  it('a warning looks different from an error', () => {
+    const html = card({ id: 'a', kind: 'step', label: 'A', problems: [{ severity: 'warning', message: 'w' }], source });
+    expect(html).toContain('card--has-warning');
+    expect(html).toContain('codicon-warning');
+  });
+
+  it('says a broken feature can not be read, not that it is unplanned', () => {
+    const html = card({ id: 'a', kind: 'feature', label: 'B', broken: true, problems: [{ severity: 'error', message: 'bad' }], source });
+    expect(html).toContain('Can&#x27;t be read');
+    expect(html).not.toContain('Not planned yet');
+    expect(html).not.toContain('card__open');
+  });
+
+  it('leaves healthy cards unmarked', () => {
+    const html = card({ id: 'a', kind: 'step', label: 'A', status: 'todo', source });
+    expect(html).not.toContain('card--has-');
+    expect(html).not.toContain('card__problem');
+  });
+});
+
 describe('breadcrumb', () => {
   const crumb = (id: string) => ({ id, title: `Title ${id}` });
   const render = (ids: string[], hide = 0) =>

@@ -13,7 +13,8 @@ import { settle } from './settle.js';
 
 type Timed = Placed & { ms: number };
 
-export type Entry = { kind: 'in' } | { kind: 'out'; focus?: string } | { kind: 'fade' };
+/** How a level arrives. `keep` is the same level after the plan changed: you stay where you were. */
+export type Entry = { kind: 'in' } | { kind: 'out'; focus?: string } | { kind: 'fade' } | { kind: 'keep' };
 
 export interface ChartHandle {
   leave(kind: 'in' | 'out', nodeId?: string): Promise<void>;
@@ -35,6 +36,7 @@ interface Props {
   selected: string | null;
   /** The details panel is open over the right edge of the canvas. */
   panelOpen: boolean;
+  emptyText: string;
   entry: Entry;
   onSelect: (id: string | null) => void;
   onOpen: (node: VNode) => void;
@@ -56,15 +58,16 @@ const sleep = (ms: number) =>
   });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
-  const { level, version, layouter, measure, selected, panelOpen, entry, onSelect, onOpen, onRendered, onError } = props;
+  const { level, version, layouter, measure, selected, panelOpen, emptyText, entry, onSelect, onOpen, onRendered, onError } = props;
   const flow = useReactFlow<PlanFlowNode, PlanFlowEdge>();
   const wrapper = useRef<HTMLDivElement>(null);
   const cache = useRef(new Map<string, Timed>());
-  const [placed, setPlaced] = useState<{ key: string; placed: Timed } | null>(null);
+  const [placed, setPlaced] = useState<{ key: string; levelId: string; placed: Timed } | null>(null);
   const [phase, setPhase] = useState<'shown' | 'leaving' | 'entering'>('entering');
   const [arrived, setArrived] = useState<string | null>(null);
   const userZoomed = useRef(false);
   const leaving = useRef(false);
+  const shownLevel = useRef<string | null>(null);
   const pendingClick = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** The card the current level was centred on (coming back up), kept for resizes. */
   const focusRef = useRef<string | undefined>(undefined);
@@ -76,7 +79,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     let cancelled = false;
     const hit = cache.current.get(key);
     if (hit) {
-      setPlaced({ key, placed: hit });
+      setPlaced({ key, levelId: level.id, placed: hit });
       return;
     }
     const started = performance.now();
@@ -86,8 +89,10 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
       .then((result) => {
         if (cancelled) return;
         const p = { ...fromElk(result, boxes, labels, level), ms: performance.now() - started };
+        // Layouts of older versions of the plan will never be shown again.
+        for (const old of cache.current.keys()) if (!old.startsWith(`${String(version)}:`)) cache.current.delete(old);
         cache.current.set(key, p);
-        setPlaced({ key, placed: p });
+        setPlaced({ key, levelId: level.id, placed: p });
       })
       .catch((err: unknown) => {
         onError(`layout failed for ${level.id}: ${err instanceof Error ? err.message : String(err)}`);
@@ -95,7 +100,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     return () => {
       cancelled = true;
     };
-  }, [key, level, layouter, measure, onError]);
+  }, [key, version, level, layouter, measure, onError]);
 
   const targetViewport = useCallback((p: Placed, focus?: string): Viewport => {
     const el = wrapper.current;
@@ -109,6 +114,18 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
   /** Shows a newly placed level with its entry transition, reading the props of that moment. */
   const showPlaced = useEffectEvent((p: Timed) => {
     leaving.current = false;
+    const sameLevel = shownLevel.current === level.id;
+    shownLevel.current = level.id;
+    if (entry.kind === 'keep' && sameLevel) {
+      // Scrolled or zoomed: leave everything alone. Otherwise only recentre for the new width.
+      if (!userZoomed.current) {
+        const target = targetViewport(p);
+        void flow.setViewport({ ...target, y: flow.getViewport().y });
+      }
+      setPhase('shown');
+      onRendered({ level: level.id, nodes: p.nodes.length, layoutMs: p.ms, width: p.width, height: p.height });
+      return undefined;
+    }
     const focus = entry.kind === 'out' ? entry.focus : undefined;
     const target = targetViewport(p, focus);
     focusRef.current = focus;
@@ -236,7 +253,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     return set;
   }, [selected, level.edges]);
 
-  const current = placed?.key === key ? placed.placed : null;
+  // While the same level is laid out again, the old chart stays up instead of a blank flash.
+  const current = placed?.key === key || placed?.levelId === level.id ? placed.placed : null;
 
   const nodes = useMemo<PlanFlowNode[]>(() => {
     if (!current) return [];
@@ -337,7 +355,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
       {current && level.nodes.length === 0 && (
         <div className="empty">
           <span className="codicon codicon-type-hierarchy" aria-hidden="true" />
-          <p>This flow has no steps yet.</p>
+          <p>{emptyText}</p>
         </div>
       )}
     </div>

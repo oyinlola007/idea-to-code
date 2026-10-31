@@ -80,4 +80,67 @@ describe('buildViewModel on Toolshed', () => {
     expect(broken.levels[OVERVIEW]?.nodes).toHaveLength(1);
     expect(broken.issues.some((i) => i.severity === 'error')).toBe(true);
   });
+
+  it('has no problem marks on a healthy plan, and leaves planned features unmarked', () => {
+    const all = Object.values(model.levels).flatMap((level) => level.nodes);
+    expect(all.filter((n) => n.problems)).toEqual([]);
+    expect(model.issues).toEqual([]);
+  });
+});
+
+describe('problem marks', () => {
+  const map =
+    'project: A\nfeatures:\n  - id: b\n    label: B\n  - id: c\n    label: C\ncomponents:\n  - id: db\n    label: DB\n    kind: database\n';
+  const flow = (nodes: string) => `feature: b\nflows:\n  main:\n    label: B\n    nodes:\n${nodes}    edges: []\n`;
+  const step = (id: string, extra = '') => `      - id: ${id}\n        type: step\n        label: ${id}\n${extra}`;
+  const nodeIn = (m: ViewModel, level: string, id: string) => m.levels[level]?.nodes.find((n) => n.id === id);
+
+  it('marks the node an issue belongs to, not its neighbours', () => {
+    const reference = '      - id: lost\n        type: reference\n        label: Lost\n        ref: nowhere\n';
+    const m = buildViewModel(
+      loadFromTexts({ 'plan/map.yaml': map, 'plan/features/b.yaml': flow(step('first') + reference + step('last')) }),
+    );
+    expect(nodeIn(m, 'b', 'lost')?.problems?.[0]?.severity).toBe('error');
+    expect(nodeIn(m, 'b', 'first')?.problems).toBeUndefined();
+    expect(nodeIn(m, 'b', 'last')?.problems).toBeUndefined();
+  });
+
+  it('marks the feature on the overview when its file has an error', () => {
+    const reference = '      - id: lost\n        type: reference\n        label: Lost\n        ref: nowhere\n';
+    const m = buildViewModel(loadFromTexts({ 'plan/map.yaml': map, 'plan/features/b.yaml': flow(reference) }));
+    const feature = nodeIn(m, OVERVIEW, 'b');
+    expect(feature?.problems?.[0]?.severity).toBe('error');
+    expect(feature?.broken).toBeUndefined();
+    expect(feature?.opens).toBe('b');
+    expect(nodeIn(m, OVERVIEW, 'c')?.problems).toBeUndefined();
+  });
+
+  it('says a feature is broken, not unplanned, when its file is unreadable, and points at the problem', () => {
+    const m = buildViewModel(loadFromTexts({ 'plan/map.yaml': map, 'plan/features/b.yaml': 'feature: b\nflows: [oops' }));
+    const feature = nodeIn(m, OVERVIEW, 'b');
+    expect(feature).toMatchObject({ broken: true });
+    expect(feature?.planned).toBeUndefined();
+    expect(feature?.opens).toBeUndefined();
+    expect(feature?.source.file).toBe('plan/features/b.yaml');
+    expect(feature?.problems?.[0]?.severity).toBe('error');
+    expect(nodeIn(m, OVERVIEW, 'c')).toMatchObject({ planned: true });
+    expect(nodeIn(m, OVERVIEW, 'db')?.problems).toBeUndefined();
+  });
+
+  it('keeps planned features out of the problem list', () => {
+    const m = buildViewModel(loadFromTexts({ 'plan/map.yaml': map }));
+    expect(m.issues).toEqual([]);
+    expect(ViewModel.safeParse(m).success).toBe(true);
+  });
+
+  it('still crosses the bridge with marks on it', () => {
+    const m = buildViewModel(loadFromTexts({ 'plan/map.yaml': map, 'plan/features/b.yaml': 'flows: [oops' }));
+    expect(ViewModel.safeParse(m).success).toBe(true);
+  });
+
+  it('survives a map that cannot be read', () => {
+    const m = buildViewModel(loadFromTexts({ 'plan/map.yaml': 'project: [oops' }));
+    expect(m.levels[OVERVIEW]?.nodes).toEqual([]);
+    expect(m.issues.some((i) => i.severity === 'error')).toBe(true);
+  });
 });

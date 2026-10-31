@@ -1,5 +1,6 @@
 // Runs inside a real editor. Every step is attempted, so one failure doesn't hide
 // the rest, and all of them are printed at the end.
+import { spawn } from 'node:child_process';
 import { appendFile, mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
@@ -160,6 +161,75 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     await rendered;
     noWebviewErrors(api);
     await closeAll();
+  });
+
+  await step('an outside process edits a file: the chart updates in place and a snapshot is recorded', async () => {
+    const opened = nextChart(api, 'bookings');
+    api.showLevel('bookings');
+    await opened;
+    const history = api.host.service?.projectHistory;
+    const before = (await history?.listSnapshots())?.length ?? 0;
+    const nodes = planState(api).model.levels.bookings?.nodes.length ?? 0;
+    const redrawn = nextChart(api, 'bookings');
+    const script = `const fs=require('fs');const f=process.argv[1];const t=fs.readFileSync(f,'utf8');fs.writeFileSync(f,t.replace('    edges:\\n','      - id: added-outside\\n        type: step\\n        label: Added by another tool\\n    edges:\\n'))`;
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(process.execPath, ['-e', script, bookingsPath], {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        stdio: 'ignore',
+      });
+      child.on('error', reject);
+      child.on('exit', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`outside process exited with ${String(code)}`));
+      });
+    });
+    const rendered = await redrawn;
+    check(rendered.nodes === nodes + 1, `${String(rendered.nodes)} nodes, was ${String(nodes)}`);
+    check(planState(api).model.levels.bookings?.nodes.some((n) => n.id === 'added-outside') === true, 'not in the model');
+    await until('a snapshot of the outside edit', async () => ((await history?.listSnapshots())?.length ?? 0) > before);
+    check((await history?.listSnapshots())?.at(-1)?.source === 'external', 'not recorded as external');
+    check((await history?.readView())?.level === 'bookings', 'lost the level');
+    noWebviewErrors(api);
+  });
+
+  await step('a broken file: the rest still draws, the feature is marked, and fixing it recovers', async () => {
+    const original = await readFile(bookingsPath, 'utf8');
+    const redrawn = nextChart(api, 'overview');
+    await writeFile(bookingsPath, 'feature: bookings\nflows: [oops');
+    await redrawn;
+    const feature = planState(api).model.levels.overview?.nodes.find((n) => n.id === 'bookings');
+    check(feature?.broken === true && feature.problems?.[0]?.severity === 'error', JSON.stringify(feature));
+    check(
+      planState(api).model.levels.overview?.nodes.some((n) => n.id === 'handover' && n.opens === 'handover') === true,
+      'other features lost',
+    );
+    check(
+      vscode.languages.getDiagnostics(bookings).some((d) => d.severity === vscode.DiagnosticSeverity.Error),
+      'no diagnostic',
+    );
+    noWebviewErrors(api);
+    await writeFile(bookingsPath, original);
+    await until('recovery', () => planState(api).model.levels.overview?.nodes.find((n) => n.id === 'bookings')?.broken !== true);
+    api.closeApp();
+    await closeAll();
+  });
+
+  await step('edits from the UI go through operations, are recorded, and refusals explain why', async () => {
+    const before = (await api.host.service?.projectHistory?.listSnapshots())?.length ?? 0;
+    const added = await api.host.applyEdit('add_feature', { label: 'Added from the app' });
+    check(added.ok && added.created?.featureId === 'added-from-the-app', JSON.stringify(added));
+    check(
+      planState(api).plan.features.some((f) => f.id === 'added-from-the-app'),
+      'state not updated by the time the edit answers',
+    );
+    const last = (await api.host.service?.projectHistory?.listSnapshots())?.at(-1);
+    check(
+      last?.source === 'ui' && last.actor === 'user' && ((await api.host.service?.projectHistory?.listSnapshots())?.length ?? 0) > before,
+      'not recorded',
+    );
+    const refused = await api.host.applyEdit('set_status', { id: 'nope', status: 'done' });
+    check(!refused.ok && (refused.message ?? '').includes('nope'), JSON.stringify(refused));
+    check((await api.host.applyEdit('remove_feature', { id: 'added-from-the-app' })).ok, 'not removed');
   });
 
   await step('a plan file opens as a chart by default', async () => {
@@ -391,6 +461,13 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
     check(!(await exists(join(data, 'projects'))), 'the level was recorded');
     check(!(await exists(join(data, 'objects'))), 'blobs were written');
     check((await api.trees.sessions.getChildren()).length === 0, 'sessions listed');
+  });
+
+  await step('edits are refused in Restricted Mode, even if asked for directly', async () => {
+    const before = await readFile(join(root, 'plan', 'map.yaml'), 'utf8');
+    const result = await api.host.applyEdit('add_feature', { label: 'Sneaky' });
+    check(!result.ok, JSON.stringify(result));
+    check((await readFile(join(root, 'plan', 'map.yaml'), 'utf8')) === before, 'the map changed');
   });
 
   await step('Initialize refuses, even when called directly', async () => {
