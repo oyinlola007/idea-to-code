@@ -23,6 +23,7 @@ import { hashOf } from './blobs.js';
 import { StoreError } from './errors.js';
 import type { Snapshot, SnapshotSource } from './events.js';
 import type { HistoryStore, ProjectHistory } from './history.js';
+import { undoStep } from './historyView.js';
 import { checkProjectPath } from './paths.js';
 import type { PlanFiles } from './planFiles.js';
 
@@ -40,7 +41,9 @@ export type ServiceEvent =
       changed: string[];
       deleted: string[];
     }
-  | { type: 'warning'; message: string };
+  | { type: 'warning'; message: string }
+  /** A check after outside writes finished, whatever it found. Another process may have recorded them itself. */
+  | { type: 'checked' };
 
 export type ApplyResult = (OpSuccess & { snapshotId?: string; summary: string }) | { ok: false; code: string; message: string };
 
@@ -313,22 +316,53 @@ export class ProjectService {
    * Makes the plan files match an earlier version exactly, recording anything unrecorded
    * first so nothing is lost. Only map.yaml and feature files are touched.
    */
-  async rollback(snapshotId: string, input: { actor: string; sessionId?: string }): Promise<RestoreResult> {
+  rollback(snapshotId: string, input: { actor: string; sessionId?: string }): Promise<RestoreResult> {
+    return this.restoreVersion(() => snapshotId, input);
+  }
+
+  /**
+   * Reverses the latest change, or the one before it if that was an Undo too. `expectedLatest` is the
+   * change the user was told about: if another has landed since, nothing is undone.
+   */
+  undo(input: { actor: string; sessionId?: string; expectedLatest?: string }): Promise<RestoreResult> {
+    const { expectedLatest, ...context } = input;
+    return this.restoreVersion(
+      (snapshots) => {
+        if (expectedLatest !== undefined && snapshots.at(-1)?.id !== expectedLatest) {
+          return {
+            ok: false,
+            code: 'plan-changed',
+            message: 'The plan just changed, so nothing was undone. Check what changed, then try again.',
+          };
+        }
+        return undoStep(snapshots)?.target.id ?? { ok: false, code: 'nothing-to-undo', message: 'There is nothing to undo.' };
+      },
+      { ...context, undo: true },
+    );
+  }
+
+  /** `pick` runs once outside changes are recorded, so it sees the true latest version. */
+  private async restoreVersion(
+    pick: (snapshots: readonly Snapshot[]) => string | { ok: false; code: string; message: string },
+    input: { actor: string; sessionId?: string; undo?: boolean },
+  ): Promise<RestoreResult> {
     const warnings: string[] = [];
     const history = await this.connectHistory(warnings);
     if (!history) return { ok: false, code: 'history-unavailable', message: warnings.join('; ') };
     try {
       return await this.guarded(warnings, async () => {
-        const target = await history.readSnapshot(snapshotId);
-        if (target.missing.length > 0) {
-          return {
-            ok: false as const,
-            code: 'blob-missing',
-            message: `can't restore this version: the stored copy of ${target.missing.join(', ')} is missing or damaged`,
-          };
-        }
         for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
           await this.recordDrift(warnings);
+          const picked = pick(await history.listSnapshots());
+          if (typeof picked !== 'string') return picked;
+          const target = await history.readSnapshot(picked);
+          if (target.missing.length > 0) {
+            return {
+              ok: false as const,
+              code: 'blob-missing',
+              message: `can't restore this version: the stored copy of ${target.missing.join(', ')} is missing or damaged`,
+            };
+          }
           const before = await this.readPlan();
           const changed = Object.keys(target.files).filter((p) => before[p] !== target.files[p]);
           const deleted = Object.keys(before).filter((p) => target.files[p] === undefined);
@@ -341,7 +375,7 @@ export class ProjectService {
           }
           let snapshot: Snapshot | undefined;
           try {
-            const restored = await history.restore(snapshotId, input);
+            const restored = await history.restore(picked, { ...input, summary: describe(before, target.files) });
             if (restored.recorded) snapshot = restored.snapshot;
           } catch (err) {
             this.warn(warnings, `the files were restored, but this wasn't recorded in history: ${messageOf(err)}`);
@@ -398,9 +432,13 @@ export class ProjectService {
     this.stopWatching = this.options.files.watch(() => {
       clearTimeout(this.quietTimer);
       this.quietTimer = setTimeout(() => {
-        this.sync().catch((err: unknown) => {
-          this.emit({ type: 'warning', message: `couldn't check for outside changes: ${messageOf(err)}` });
-        });
+        this.sync()
+          .then(() => {
+            this.emit({ type: 'checked' });
+          })
+          .catch((err: unknown) => {
+            this.emit({ type: 'warning', message: `couldn't check for outside changes: ${messageOf(err)}` });
+          });
       }, quietMs);
     });
   }

@@ -57,6 +57,14 @@ export class AppPanel {
     }
   }
 
+  /** Shows the tab with the history panel open. */
+  showHistory(session?: string): void {
+    // A hidden tab reloads when revealed, and a new one is still loading, so neither is listening yet.
+    const listening = this.panel?.visible === true;
+    this.show();
+    this.connection?.showHistory(session, !listening);
+  }
+
   close(): void {
     this.panel?.dispose();
   }

@@ -34,6 +34,8 @@ const SnapshotEvent = z.object({
   files: z.record(z.string(), z.string()),
   summary: z.string().optional(),
   restoredFrom: z.string().optional(),
+  /** This restore was an Undo, so the next Undo carries on further back instead of reversing it. */
+  undo: z.boolean().optional(),
 });
 
 export const HistoryEvent = z.discriminatedUnion('type', [SessionOpen, SessionClose, SnapshotEvent]);

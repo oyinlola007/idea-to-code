@@ -119,7 +119,7 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     const features = api.trees.features.getChildren();
     check(features.length === 5, `${String(features.length)} features`);
     check(api.trees.features.getTreeItem(features[0] ?? never()).command?.command === 'ideaToCode.openApp', 'opens the app');
-    await until('an activity session', async () => (await api.trees.sessions.getChildren()).length > 0);
+    await until('an activity session', () => api.trees.sessions.getChildren().length > 0);
   });
 
   await step('app tab renders through the validated bridge, with no CSP errors', async () => {
@@ -230,6 +230,43 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     const refused = await api.host.applyEdit('set_status', { id: 'nope', status: 'done' });
     check(!refused.ok && (refused.message ?? '').includes('nope'), JSON.stringify(refused));
     check((await api.host.applyEdit('remove_feature', { id: 'added-from-the-app' })).ok, 'not removed');
+  });
+
+  await step('history lists changes; restore and undo change the files and update the state', async () => {
+    const original = await readFile(bookingsPath, 'utf8');
+    check((await api.host.applyEdit('set_status', { id: 'join-waitlist', status: 'done' })).ok, 'edit failed');
+    const edited = await readFile(bookingsPath, 'utf8');
+    check(edited !== original, 'the edit changed nothing');
+
+    const afterEdit = planState(api).history;
+    const newest = afterEdit?.sessions[0]?.entries[0];
+    const previous = afterEdit?.sessions.flatMap((s) => s.entries)[1];
+    check(newest?.who === 'You' && newest.source === 'ui', `newest change: ${JSON.stringify(newest)}`);
+    check(afterEdit?.undo?.latest === newest?.id, 'undo does not point at the newest change');
+
+    check((await api.host.restoreVersion(previous?.id ?? '')).ok, 'restore failed');
+    check((await readFile(bookingsPath, 'utf8')) === original, 'restore did not put the file back');
+    check(planState(api).history?.sessions[0]?.entries[0]?.source === 'restore', 'no restore entry');
+
+    const stale = await api.host.undo(newest?.id ?? '');
+    check(!stale.ok && (await readFile(bookingsPath, 'utf8')) === original, 'undo went ahead on a plan that had moved on');
+
+    const latest = planState(api).history?.undo?.latest ?? '';
+    check((await api.host.undo(latest)).ok, 'undoing the restore failed');
+    check((await readFile(bookingsPath, 'utf8')) === edited, 'undo did not reverse the restore');
+
+    check((await api.host.undo(planState(api).history?.undo?.latest ?? '')).ok, 'second undo failed');
+    check((await readFile(bookingsPath, 'utf8')) === original, 'second undo did not go further back');
+  });
+
+  await step('the sidebar lists sessions, and one opens the history', async () => {
+    const [session] = api.trees.sessions.getChildren();
+    check(session !== undefined, 'no session listed');
+    if (!session) return;
+    const item = api.trees.sessions.getTreeItem(session);
+    check(item.command?.command === 'ideaToCode.showHistory', 'the session does not open history');
+    await vscode.commands.executeCommand('ideaToCode.showHistory', session.id);
+    check(api.events.errors.length === 0, `page errors: ${api.events.errors.join('; ')}`);
   });
 
   await step('a plan file opens as a chart by default', async () => {
@@ -460,7 +497,11 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
     await api.host.publishLevel('bookings');
     check(!(await exists(join(data, 'projects'))), 'the level was recorded');
     check(!(await exists(join(data, 'objects'))), 'blobs were written');
-    check((await api.trees.sessions.getChildren()).length === 0, 'sessions listed');
+    check(api.trees.sessions.getChildren().length === 0, 'sessions listed');
+    check(planState(api).history === null, 'history was sent to the page');
+    const refused = await api.host.undo('anything');
+    check(!refused.ok, 'undo ran in Restricted Mode');
+    check(!(await api.host.restoreVersion('anything')).ok, 'restore ran in Restricted Mode');
   });
 
   await step('edits are refused in Restricted Mode, even if asked for directly', async () => {

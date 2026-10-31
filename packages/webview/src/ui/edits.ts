@@ -42,11 +42,12 @@ export function canSetStatus(node: VNode): boolean {
   return (node.kind === 'step' || node.kind === 'component') && node.opens === undefined;
 }
 
-/** Cards this one could flow into that it doesn't already. On the overview only features connect. */
+/** Cards this one could flow into that it doesn't already. On the overview only features connect; nothing leaves an end or enters a start. */
 export function connectTargets(node: VNode, level: Level): VNode[] {
-  if (level.id === OVERVIEW && node.kind !== 'feature') return [];
+  if (node.kind === 'end' || (level.id === OVERVIEW && node.kind !== 'feature')) return [];
   const linked = new Set(level.edges.filter((edge) => edge.from === node.id).map((edge) => edge.to));
   return level.nodes.filter(
-    (other) => other.id !== node.id && !linked.has(other.id) && (level.id !== OVERVIEW || other.kind === 'feature'),
+    (other) =>
+      other.id !== node.id && !linked.has(other.id) && other.kind !== 'start' && (level.id !== OVERVIEW || other.kind === 'feature'),
   );
 }

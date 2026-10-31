@@ -38,13 +38,25 @@ export function onHostMessage(callback: (message: HostMessage) => void): () => v
 const pendingEdits = new Map<number, (result: EditResult) => void>();
 let nextRequest = 1;
 
-/** Asks the host to apply an edit; answers when the plan has been updated, or why it wasn't. */
-export function sendEdit(name: UiOperation, input: unknown): Promise<EditResult> {
+/** Sends a change to the plan; answers when the plan has been updated, or why it wasn't. */
+function request(message: (requestId: number) => WebviewMessage): Promise<EditResult> {
   const requestId = nextRequest++;
   return new Promise((resolve) => {
     pendingEdits.set(requestId, resolve);
-    send({ type: 'edit', requestId, name, input });
+    send(message(requestId));
   });
+}
+
+export function sendEdit(name: UiOperation, input: unknown): Promise<EditResult> {
+  return request((requestId) => ({ type: 'edit', requestId, name, input }));
+}
+
+export function sendRestore(snapshotId: string): Promise<EditResult> {
+  return request((requestId) => ({ type: 'restore', requestId, snapshotId }));
+}
+
+export function sendUndo(latest: string): Promise<EditResult> {
+  return request((requestId) => ({ type: 'undo', requestId, latest }));
 }
 
 export function finishEdit(requestId: number, result: EditResult): void {

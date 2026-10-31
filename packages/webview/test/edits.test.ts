@@ -60,3 +60,21 @@ describe('what a card allows', () => {
     expect(connectTargets(step, linked).map((n) => n.id)).toEqual(['p']);
   });
 });
+
+describe('what Connect to offers', () => {
+  const start: VNode = { id: 'start', kind: 'start', label: 'Start', source };
+  const end: VNode = { id: 'end', kind: 'end', label: 'End', source };
+  const withEnds = level('flow', [start, step, end]);
+
+  it('never leads back into a start', () => {
+    expect(connectTargets(step, withEnds).map((n) => n.id)).toEqual(['end']);
+  });
+
+  it('offers nothing from an end', () => {
+    expect(connectTargets(end, withEnds)).toEqual([]);
+  });
+
+  it('lets a start lead into the rest', () => {
+    expect(connectTargets(start, withEnds).map((n) => n.id)).toEqual(['s', 'end']);
+  });
+});

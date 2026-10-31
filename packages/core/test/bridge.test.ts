@@ -32,7 +32,10 @@ describe('summarizePlan', () => {
 
   it('produces state the bridge accepts', () => {
     const model = buildViewModel(loadFromTexts(toolshed));
-    const message = { type: 'state', state: { kind: 'plan', trusted: true, folder: 'toolshed', plan: summarizePlan(toolshed), model } };
+    const message = {
+      type: 'state',
+      state: { kind: 'plan', trusted: true, folder: 'toolshed', plan: summarizePlan(toolshed), model, history: null },
+    };
     expect(HostMessage.safeParse(message).success).toBe(true);
   });
 });

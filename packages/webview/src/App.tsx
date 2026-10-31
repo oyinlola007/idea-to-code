@@ -1,10 +1,10 @@
 // The plan viewer: a toolbar, the chart for the current level, the details panel
 // and the problems banner. Moving around stays simple here; ITC-12 adds history,
 // the breadcrumb and transitions. The host only supplies the model.
-import { OVERVIEW, type AppState, type Level, type ViewModel, type VNode } from '@idea-to-code/core';
+import { OVERVIEW, type AppState, type EditResult, type HistoryView, type Level, type ViewModel, type VNode } from '@idea-to-code/core';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { finishEdit, loadSaved, log, onHostMessage, save, send, sendEdit } from './bridge.js';
+import { finishEdit, loadSaved, log, onHostMessage, save, send, sendEdit, sendRestore, sendUndo } from './bridge.js';
 import { Chart, type ChartHandle, type Entry, type RenderInfo } from './chart/Chart.js';
 import { createLayouter, type Layouter } from './layout/elkClient.js';
 import { canvasMeasure } from './layout/measure.js';
@@ -14,6 +14,7 @@ import './theme.css';
 import { Breadcrumb } from './ui/Breadcrumb.js';
 import { DetailsPanel } from './ui/DetailsPanel.js';
 import type { Edit } from './ui/edits.js';
+import { HistoryPanel } from './ui/HistoryPanel.js';
 import { TextForm } from './ui/TextForm.js';
 import { ProgressRing, progressText } from './ui/ProgressRing.js';
 
@@ -93,6 +94,10 @@ interface ToolbarProps {
   onHistory: (dir: 'back' | 'forward') => void;
   onGo: (level: string) => void;
   onAdd: (type: 'feature' | 'step' | 'decision', label: string) => void;
+  history: HistoryView | null;
+  historyOpen: boolean;
+  onToggleHistory: () => void;
+  onUndo: () => void;
 }
 
 /** Adds a feature on the overview, or a step or decision inside a flow. */
@@ -164,7 +169,7 @@ function AddButton({ level, onAdd }: { level: Level; onAdd: ToolbarProps['onAdd'
   );
 }
 
-function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd }: ToolbarProps) {
+function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd, history, historyOpen, onToggleHistory, onUndo }: ToolbarProps) {
   const { done, total } = level.progress;
   return (
     <header className="toolbar">
@@ -197,6 +202,30 @@ function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd }: ToolbarProps) 
       <Breadcrumb key={level.id} crumbs={level.crumbs} onGo={onGo} />
       <div className="toolbar__meta">
         {canEdit && <AddButton key={level.id} level={level} onAdd={onAdd} />}
+        {history && (
+          <>
+            <button
+              type="button"
+              className="icon-button"
+              disabled={history.undo === null}
+              title={history.undo === null ? 'Nothing to undo' : `Undo: ${history.undo.summary} (${history.undo.who})`}
+              aria-label="Undo"
+              onClick={onUndo}
+            >
+              <span className="codicon codicon-discard" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              title="History"
+              aria-label="History"
+              aria-pressed={historyOpen}
+              onClick={onToggleHistory}
+            >
+              <span className="codicon codicon-history" aria-hidden="true" />
+            </button>
+          </>
+        )}
         {level.depth > 0 && (
           <span className="depth" title={`${String(level.depth)} level${level.depth > 1 ? 's' : ''} below the overview`}>
             Level {level.depth}
@@ -235,9 +264,23 @@ interface ViewerProps {
   onNav: (nav: (state: NavState) => NavState, entry?: Entry) => void;
   /** The newest plan, which an edit's answer can reach before this has rendered it. */
   latestModel: () => ViewModel | null;
+  history: HistoryView | null;
+  historyPanel: HistoryRequest | null;
+  onHistoryPanel: (panel: HistoryRequest | null) => void;
 }
 
-function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: ViewerProps) {
+function Viewer({
+  trusted,
+  model,
+  version,
+  nav,
+  entry,
+  onNav,
+  latestModel,
+  history: planHistory,
+  historyPanel,
+  onHistoryPanel,
+}: ViewerProps) {
   const [layouter, setLayouter] = useState<Layouter | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [measure] = useState<Measure>(firstMeasure);
@@ -267,12 +310,26 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
   const selectedNode = level?.nodes.find((node) => node.id === nav.selected) ?? null;
   const parent = level?.parent ?? null;
 
-  const runEdit = useCallback(async (edit: Edit) => {
+  const report = useCallback(async (pending: Promise<EditResult>) => {
     setEditError(null);
-    const result = await sendEdit(edit.name, edit.input);
+    const result = await pending;
     if (!result.ok) setEditError(result.message ?? "That change couldn't be made.");
     return result;
   }, []);
+
+  const runEdit = useCallback((edit: Edit) => report(sendEdit(edit.name, edit.input)), [report]);
+
+  const undoing = useRef(false);
+  const undo = useCallback(async () => {
+    // A second press before the first lands would be refused as "the plan just changed".
+    if (planHistory?.undo == null || undoing.current) return;
+    undoing.current = true;
+    try {
+      await report(sendUndo(planHistory.undo.latest));
+    } finally {
+      undoing.current = false;
+    }
+  }, [planHistory, report]);
 
   const onEdit = useCallback(async (edit: Edit) => (await runEdit(edit)).ok, [runEdit]);
 
@@ -336,9 +393,13 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
     const onKey = (event: KeyboardEvent) => {
       // Typing in a form or choosing from a list isn't navigating.
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
-      if (event.key === 'Escape') {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key === 'z') {
         event.preventDefault();
-        if (nav.details || nav.selected !== null) dispatch({ type: 'escape' });
+        void undo();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        if (historyPanel) onHistoryPanel(null);
+        else if (nav.details || nav.selected !== null) dispatch({ type: 'escape' });
         else if (parent !== null) void goOut(parent);
       } else if (event.key === 'Enter' && selectedNode && !(event.target instanceof HTMLButtonElement)) {
         event.preventDefault();
@@ -364,7 +425,7 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('mouseup', onMouse);
     };
-  }, [nav, parent, selectedNode, dispatch, goOut, open, history]);
+  }, [nav, parent, selectedNode, dispatch, goOut, open, history, undo, historyPanel, onHistoryPanel]);
 
   const onRendered = useCallback(
     (info: RenderInfo) => {
@@ -377,9 +438,11 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
   }, []);
   const onSelect = useCallback(
     (id: string | null) => {
+      // A card's details and the history share the same spot; clicking a card asks for the details.
+      if (id !== null) onHistoryPanel(null);
       dispatch({ type: 'select', id });
     },
-    [dispatch],
+    [dispatch, onHistoryPanel],
   );
   const onOpen = useCallback(
     (node: VNode) => {
@@ -435,6 +498,14 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
         level={level}
         nav={nav}
         canEdit={trusted}
+        history={planHistory}
+        historyOpen={historyPanel !== null}
+        onToggleHistory={() => {
+          onHistoryPanel(historyPanel ? null : {});
+        }}
+        onUndo={() => {
+          void undo();
+        }}
         onAdd={(type, label) => {
           void onAdd(type, label);
         }}
@@ -476,7 +547,7 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
           layouter={layouter}
           measure={measure}
           selected={selectedNode?.id ?? null}
-          panelOpen={nav.details}
+          panelOpen={nav.details || historyPanel !== null}
           emptyText={emptyText(model, level, trusted)}
           entry={entry}
           onSelect={onSelect}
@@ -484,7 +555,19 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
           onRendered={onRendered}
           onError={onError}
         />
-        {nav.details && selectedNode && (
+        {historyPanel && planHistory && (
+          <HistoryPanel
+            history={planHistory}
+            focusSession={historyPanel.session}
+            onRestore={(snapshotId) => {
+              void report(sendRestore(snapshotId));
+            }}
+            onClose={() => {
+              onHistoryPanel(null);
+            }}
+          />
+        )}
+        {!historyPanel && nav.details && selectedNode && (
           <DetailsPanel
             key={selectedNode.id}
             node={selectedNode}
@@ -508,6 +591,11 @@ function Viewer({ trusted, model, version, nav, entry, onNav, latestModel }: Vie
   );
 }
 
+/** The history panel is open, on this session if one was asked for. */
+interface HistoryRequest {
+  session?: string;
+}
+
 export function App() {
   const [state, setState] = useState<AppState | null>(null);
   // The host sends state on every refresh; only a real change to the plan lays the chart out again.
@@ -515,6 +603,7 @@ export function App() {
   // Held here because the host can ask for a level before the viewer has mounted.
   const [nav, setNav] = useState<NavState>(() => restoreNav(loadSaved()) ?? initialNav());
   const [entry, setEntry] = useState<Entry>({ kind: 'fade' });
+  const [historyPanel, setHistoryPanel] = useState<HistoryRequest | null>(null);
 
   const latest = useRef<ViewModel | null>(null);
   const latestModel = useCallback(() => latest.current, []);
@@ -531,6 +620,10 @@ export function App() {
       }
       if (message.type === 'edit-result') {
         finishEdit(message.requestId, message.result);
+        return;
+      }
+      if (message.type === 'show-history') {
+        setHistoryPanel(message.session === undefined ? {} : { session: message.session });
         return;
       }
       setState(message.state);
@@ -582,6 +675,9 @@ export function App() {
           entry={entry}
           onNav={onNav}
           latestModel={latestModel}
+          history={state.history}
+          historyPanel={historyPanel}
+          onHistoryPanel={setHistoryPanel}
         />
       ) : (
         <NoPlan trusted={state.trusted} />

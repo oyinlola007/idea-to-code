@@ -81,6 +81,20 @@ describe('outside changes', () => {
     expect(events[0]).toMatchObject({ cause: 'external', changed: [BOOKINGS] });
   });
 
+  it('says when a check finished, even if another process had already recorded the change', async () => {
+    const other = await open();
+    const service = await open(new NodePlanFiles(root), 50);
+    const events: ServiceEvent[] = [];
+    service.onEvent((e) => events.push(e));
+    service.startWatching();
+    await sleep(50);
+    await other.apply({ name: 'set_status', input: { id: 'join-waitlist', status: 'done' } }, { source: 'mcp', actor: 'test' });
+    await sleep(400);
+    await service.dispose();
+    expect(events.filter((e) => e.type === 'changed')).toHaveLength(0);
+    expect(events.some((e) => e.type === 'checked')).toBe(true);
+  });
+
   it("doesn't react to its own writes while watching", async () => {
     const service = await open(new NodePlanFiles(root), 50);
     const events: ServiceEvent[] = [];

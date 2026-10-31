@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { blobPath } from '../src/blobs.js';
 import { HistoryStore } from '../src/history.js';
+import { buildHistoryView } from '../src/historyView.js';
 import { NodePlanFiles } from '../src/nodePlanFiles.js';
 import { ProjectService, type ServiceEvent } from '../src/projectService.js';
 import { outsideEditorSave, projectFolder, tempDir, toolshed } from './helpers.js';
@@ -98,5 +99,101 @@ describe('rollback', () => {
     const r = await service.rollback(firstId, { actor: 'user' });
     expect(r).toMatchObject({ ok: true, changed: [], deleted: [] });
     await expect(service.projectHistory?.listSnapshots()).resolves.toHaveLength(1);
+  });
+
+  it('says what the restore changed', async () => {
+    await service.apply({ name: 'remove_feature', input: { id: 'handover' } }, UI);
+    await service.rollback(firstId, { actor: 'user' });
+    const latest = (await service.projectHistory?.listSnapshots())?.at(-1);
+    expect(latest?.summary).toContain('Pickup and return');
+  });
+});
+
+describe('several sessions, back to the first and forward again', () => {
+  it('moves through a plan that changed across sessions, keeping every version', async () => {
+    const history = service.projectHistory;
+    if (!history) throw new Error('expected history');
+    const chat = await history.openSession({ kind: 'chat', editor: 'vscode', title: 'Planning' });
+
+    await service.apply({ name: 'set_status', input: { id: 'join-waitlist', status: 'done' } }, UI);
+    const inChat = await service.apply(
+      { name: 'add_feature', input: { label: 'Insurance' } },
+      { source: 'agent', actor: 'test', sessionId: chat.id },
+    );
+    await history.openSession({ kind: 'activity' });
+    const last = await service.apply({ name: 'remove_feature', input: { id: 'handover' } }, UI);
+    if (!inChat.ok || !last.ok) throw new Error('expected the edits to work');
+    const finished = await service.readPlan();
+
+    await service.rollback(firstId, { actor: 'user' });
+    await expect(service.readPlan()).resolves.toEqual(await toolshed());
+
+    await service.rollback(last.snapshotId ?? '', { actor: 'user' });
+    await expect(service.readPlan()).resolves.toEqual(finished);
+
+    const view = buildHistoryView(await history.listSessions(), await history.listSnapshots());
+    expect(view.sessions.flatMap((s) => s.entries)).toHaveLength(6);
+    expect(view.sessions.map((s) => s.title)).toContain('Planning');
+    await expect(history.verify()).resolves.toMatchObject({ problems: [] });
+  });
+});
+
+describe('undo', () => {
+  const edit = async (status: 'done' | 'in_progress') => {
+    const result = await service.apply({ name: 'set_status', input: { id: 'join-waitlist', status } }, UI);
+    if (!result.ok) throw new Error(result.message);
+    return result;
+  };
+  const latestId = async () => (await service.projectHistory?.listSnapshots())?.at(-1)?.id ?? '';
+
+  it('reverses the last edit, then the one before, and stops at the first version', async () => {
+    await edit('in_progress');
+    const afterFirst = await service.readPlan();
+    await edit('done');
+
+    await expect(service.undo({ actor: 'user' })).resolves.toMatchObject({ ok: true, changed: [BOOKINGS] });
+    await expect(service.readPlan()).resolves.toEqual(afterFirst);
+    await expect(service.undo({ actor: 'user' })).resolves.toMatchObject({ ok: true });
+    await expect(service.readPlan()).resolves.toEqual(await toolshed());
+    await expect(service.undo({ actor: 'user' })).resolves.toMatchObject({ ok: false, code: 'nothing-to-undo' });
+  });
+
+  it('reverses a restore, which is how a restore gets taken back', async () => {
+    await edit('done');
+    const edited = await service.readPlan();
+    await service.rollback(firstId, { actor: 'user' });
+    await service.undo({ actor: 'user' });
+    await expect(service.readPlan()).resolves.toEqual(edited);
+  });
+
+  it('brings back a deleted feature with everything inside it', async () => {
+    await service.apply({ name: 'remove_feature', input: { id: 'handover' } }, UI);
+    await service.undo({ actor: 'user' });
+    await expect(service.readPlan()).resolves.toEqual(await toolshed());
+  });
+
+  it('refuses if another change landed since the user was told what Undo would do', async () => {
+    await edit('done');
+    const shown = await latestId();
+    const text = await readFile(join(root, BOOKINGS), 'utf8');
+    await outsideEditorSave(root, BOOKINGS, `${text}# someone else's work\n`);
+
+    await expect(service.undo({ actor: 'user', expectedLatest: shown })).resolves.toMatchObject({ ok: false, code: 'plan-changed' });
+    await expect(readFile(join(root, BOOKINGS), 'utf8')).resolves.toContain("# someone else's work");
+    expect(await latestId()).not.toBe(shown);
+  });
+
+  it('goes ahead when the plan is what the user was told about', async () => {
+    await edit('done');
+    await expect(service.undo({ actor: 'user', expectedLatest: await latestId() })).resolves.toMatchObject({ ok: true });
+  });
+
+  it('marks the snapshot as an Undo, and a plain restore as not', async () => {
+    await edit('done');
+    await service.undo({ actor: 'user' });
+    await edit('done');
+    await service.rollback(firstId, { actor: 'user' });
+    const snapshots = (await service.projectHistory?.listSnapshots()) ?? [];
+    expect(snapshots.filter((s) => s.source === 'restore').map((s) => s.undo)).toEqual([true, undefined]);
   });
 });

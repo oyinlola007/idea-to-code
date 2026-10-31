@@ -43,6 +43,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.commands.registerCommand('ideaToCode.openApp', () => {
       app.show();
     }),
+    vscode.commands.registerCommand('ideaToCode.showHistory', (session?: string) => {
+      app.showHistory(session);
+    }),
     vscode.commands.registerCommand('ideaToCode.initPlan', async (options?: InitOptions) => {
       await initPlan(host, trust, options);
       if (host.state.kind === 'plan') app.show();

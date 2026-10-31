@@ -1,6 +1,5 @@
 // The activity bar's views: the plan's features with their progress, and its sessions.
-import type { AppState } from '@idea-to-code/core';
-import type { Session } from '@idea-to-code/store';
+import type { AppState, HistorySession } from '@idea-to-code/core';
 import * as vscode from 'vscode';
 import type { ProjectHost } from './projectHost.js';
 
@@ -36,7 +35,7 @@ export class FeatureTree implements vscode.TreeDataProvider<Feature> {
   }
 }
 
-export class SessionTree implements vscode.TreeDataProvider<Session> {
+export class SessionTree implements vscode.TreeDataProvider<HistorySession> {
   private readonly changed = new vscode.EventEmitter<undefined>();
   readonly onDidChangeTreeData = this.changed.event;
 
@@ -46,18 +45,20 @@ export class SessionTree implements vscode.TreeDataProvider<Session> {
     this.changed.fire(undefined);
   }
 
-  getTreeItem(session: Session): vscode.TreeItem {
-    const item = new vscode.TreeItem(session.title ?? (session.kind === 'chat' ? 'Chat' : 'Activity'));
-    item.description = new Date(session.openedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  getTreeItem(session: HistorySession): vscode.TreeItem {
+    const item = new vscode.TreeItem(session.title);
+    const count = session.entries.length;
+    const when = new Date(session.openedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    item.description = `${String(count)} change${count === 1 ? '' : 's'} · ${when}`;
     item.iconPath = new vscode.ThemeIcon(session.kind === 'chat' ? 'comment-discussion' : 'history');
-    if (session.summary !== undefined) item.tooltip = session.summary;
+    item.tooltip = session.entries[0]?.summary ?? session.title;
+    item.command = { command: 'ideaToCode.showHistory', title: 'Show in History', arguments: [session.id] };
     return item;
   }
 
-  async getChildren(parent?: Session): Promise<Session[]> {
-    if (parent) return [];
-    const sessions = (await this.host.service?.projectHistory?.listSessions()) ?? [];
-    return [...sessions].reverse();
+  getChildren(parent?: HistorySession): HistorySession[] {
+    const { state } = this.host;
+    return !parent && state.kind === 'plan' ? (state.history?.sessions ?? []) : [];
   }
 }
 

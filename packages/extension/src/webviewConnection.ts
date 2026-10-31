@@ -54,6 +54,8 @@ async function openSource(host: ProjectHost, file: string, line: number, log: vs
 
 export interface WebviewConnection extends vscode.Disposable {
   showLevel(level: string): void;
+  /** Opens the history panel. `whenReady` is for a page still loading, which isn't listening yet. */
+  showHistory(session: string | undefined, whenReady: boolean): void;
 }
 
 export function connectWebview(
@@ -70,6 +72,7 @@ export function connectWebview(
     post({ type: 'state', state });
   };
   let start = startLevel;
+  let pending: HostMessage | undefined;
   const subscription = vscode.Disposable.from(
     host.onDidChange(send),
     webview.onDidReceiveMessage(async (raw: unknown) => {
@@ -85,6 +88,8 @@ export function connectWebview(
           send(host.state);
           if (start !== undefined) post({ type: 'show-level', level: start });
           start = undefined;
+          if (pending) post(pending);
+          pending = undefined;
           break;
         case 'log':
           if (message.level === 'error') events.errors.push(message.message);
@@ -102,6 +107,12 @@ export function connectWebview(
         case 'edit':
           post({ type: 'edit-result', requestId: message.requestId, result: await host.applyEdit(message.name, message.input) });
           break;
+        case 'restore':
+          post({ type: 'edit-result', requestId: message.requestId, result: await host.restoreVersion(message.snapshotId) });
+          break;
+        case 'undo':
+          post({ type: 'edit-result', requestId: message.requestId, result: await host.undo(message.latest) });
+          break;
         case 'level':
           await host.publishLevel(message.level);
           break;
@@ -117,6 +128,11 @@ export function connectWebview(
   return {
     showLevel(level) {
       post({ type: 'show-level', level });
+    },
+    showHistory(session, whenReady) {
+      const message: HostMessage = { type: 'show-history', ...(session === undefined ? {} : { session }) };
+      if (whenReady) pending = message;
+      else post(message);
     },
     dispose() {
       subscription.dispose();

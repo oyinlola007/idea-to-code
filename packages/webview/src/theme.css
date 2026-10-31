@@ -146,6 +146,10 @@ button {
 .icon-button:hover:not(:disabled) {
   background: var(--itc-hover);
 }
+.icon-button[aria-pressed='true'] {
+  background: var(--itc-hover);
+  color: var(--itc-accent);
+}
 .icon-button:disabled {
   opacity: 0.35;
   cursor: default;
@@ -988,6 +992,107 @@ body.vscode-high-contrast-light .ring__track {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ---------- History ---------- */
+
+.history {
+  padding-top: 0;
+}
+/* The way out stays in reach down a long list. */
+.history .details__header {
+  position: sticky;
+  top: 0;
+  margin-bottom: 0;
+  padding: 12px 0 6px;
+  background: var(--vscode-editorWidget-background, var(--itc-card));
+  z-index: 1;
+}
+
+.history__session {
+  margin-top: 14px;
+  /* Lands clear of the sticky header. */
+  scroll-margin-top: 44px;
+}
+.history__session--focus h3 > span:first-child {
+  color: var(--itc-accent);
+}
+.history__session h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.history__opened {
+  flex: none;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--itc-muted);
+}
+.history__session ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.history__entry {
+  padding: 8px 0;
+  border-top: 1px solid var(--itc-border);
+  font-size: 12px;
+  line-height: 17px;
+}
+.history__what {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.history__restored {
+  margin: 0;
+  font-weight: 500;
+}
+.history__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-height: 22px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--itc-muted);
+}
+.history__now {
+  color: var(--itc-fg);
+  font-weight: 500;
+}
+.history__restore {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--vscode-textLink-foreground);
+  font-size: 11px;
+  cursor: pointer;
+}
+.history__restore:hover {
+  color: var(--vscode-textLink-activeForeground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+.history__confirm {
+  margin-top: 6px;
+}
+.history__confirm p {
+  margin: 0 0 8px;
+}
+.history__confirm div {
+  display: flex;
+  gap: 8px;
+}
+.history__note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--itc-muted);
 }
 
 /* ---------- Editing ---------- */

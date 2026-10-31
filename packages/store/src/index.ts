@@ -5,6 +5,7 @@ export * from './appData.js';
 export { StoreError, type StoreErrorCode } from './errors.js';
 export { SnapshotSource, type Session, type Snapshot } from './events.js';
 export * from './history.js';
+export * from './historyView.js';
 export * from './nodePlanFiles.js';
 export * from './paths.js';
 export type { PlanFiles } from './planFiles.js';

@@ -35,9 +35,55 @@ const PlanSummary = z.strictObject({
 });
 export type PlanSummary = z.infer<typeof PlanSummary>;
 
+const HistoryEntry = z.strictObject({
+  id: z.string(),
+  at: z.number(),
+  source: z.enum(['ui', 'agent', 'mcp', 'external', 'restore', 'repair']),
+  /** Who made the change, in words: "You", "Claude Code via MCP", "Outside edit". */
+  who: z.string(),
+  summary: z.string(),
+  /** A restore only: when the version it brought back was made. */
+  restoredFromAt: z.number().optional(),
+  /** A restore made by Undo. */
+  undo: z.boolean().optional(),
+  /** Holds exactly what the plan holds now, so restoring it would change nothing. */
+  current: z.boolean(),
+});
+export type HistoryEntry = z.infer<typeof HistoryEntry>;
+
+const HistorySession = z.strictObject({
+  id: z.string(),
+  kind: z.enum(['chat', 'activity']),
+  title: z.string(),
+  openedAt: z.number(),
+  /** Newest first. */
+  entries: z.array(HistoryEntry),
+});
+export type HistorySession = z.infer<typeof HistorySession>;
+
+export const HistoryView = z.strictObject({
+  /** The session with the newest change first. */
+  sessions: z.array(HistorySession),
+  /** Earlier changes left out of the list, to keep it a sensible size. They stay in history. */
+  older: z.number().int(),
+  /** What Undo would reverse. `latest` lets the host refuse if the plan has moved on since this was shown. */
+  undo: z.strictObject({ latest: z.string(), who: z.string(), summary: z.string() }).nullable(),
+  /** Why history couldn't be read. */
+  problem: z.string().optional(),
+});
+export type HistoryView = z.infer<typeof HistoryView>;
+
 export const AppState = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('no-plan'), trusted: z.boolean() }),
-  z.strictObject({ kind: z.literal('plan'), trusted: z.boolean(), folder: z.string(), plan: PlanSummary, model: ViewModel }),
+  z.strictObject({
+    kind: z.literal('plan'),
+    trusted: z.boolean(),
+    folder: z.string(),
+    plan: PlanSummary,
+    model: ViewModel,
+    /** Null in Restricted Mode, which records and reads no history. */
+    history: HistoryView.nullable(),
+  }),
 ]);
 export type AppState = z.infer<typeof AppState>;
 
@@ -74,6 +120,8 @@ export const HostMessage = z.discriminatedUnion('type', [
   /** Show this level, e.g. the feature whose file was opened. */
   z.strictObject({ type: z.literal('show-level'), level: z.string() }),
   z.strictObject({ type: z.literal('edit-result'), requestId: z.number().int(), result: EditResult }),
+  /** Open the history panel, at a session if one is given. */
+  z.strictObject({ type: z.literal('show-history'), session: z.string().optional() }),
 ]);
 export type HostMessage = z.infer<typeof HostMessage>;
 
@@ -93,6 +141,8 @@ export const WebviewMessage = z.discriminatedUnion('type', [
   /** The level this tab is showing, for agents to read. */
   z.strictObject({ type: z.literal('level'), level: z.string().max(500) }),
   z.strictObject({ type: z.literal('edit'), requestId: z.number().int(), name: UiOperation, input: z.unknown() }),
+  z.strictObject({ type: z.literal('restore'), requestId: z.number().int(), snapshotId: z.string().max(100) }),
+  z.strictObject({ type: z.literal('undo'), requestId: z.number().int(), latest: z.string().max(100) }),
   z.strictObject({ type: z.literal('init-plan') }),
   z.strictObject({ type: z.literal('open-source'), file: z.string().max(500), line: z.number().int().min(1) }),
 ]);

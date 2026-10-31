@@ -101,6 +101,13 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "ideaToCode.showHistory",
+        "title": "Show History",
+        "category": "idea-to-code",
+        "icon": "$(history)",
+        "enablement": "isWorkspaceTrusted && ideaToCode.hasPlan"
+      },
+      {
         "command": "ideaToCode.reopenAsText",
         "title": "Reopen as Text",
         "category": "idea-to-code",
@@ -130,6 +137,11 @@
         {
           "command": "ideaToCode.openApp",
           "when": "view == ideaToCode.features && ideaToCode.hasPlan",
+          "group": "navigation"
+        },
+        {
+          "command": "ideaToCode.showHistory",
+          "when": "view == ideaToCode.sessions && ideaToCode.hasPlan && isWorkspaceTrusted",
           "group": "navigation"
         }
       ]

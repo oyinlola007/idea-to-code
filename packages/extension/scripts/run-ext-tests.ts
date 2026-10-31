@@ -29,6 +29,8 @@ const EDITORS: Record<string, Target> = {
 };
 
 const { values } = parseArgs({
+  // pnpm passes the "--" along, and everything after one would be ignored as a positional.
+  args: process.argv.slice(2).filter((arg) => arg !== '--'),
   options: { editor: { type: 'string', default: 'all' }, version: { type: 'string' }, scenario: { type: 'string' } },
   allowPositionals: true,
 });

@@ -1,8 +1,16 @@
 // The workspace's plan, as the rest of the extension sees it: which folder, what it
 // says, and (when trusted) the ProjectService behind it. Every change takes one path,
 // refresh(), so the sidebar, tabs and Problems panel can't disagree.
-import { buildViewModel, loadFromTexts, summarizePlan, type AppState, type EditResult, type UiOperation } from '@idea-to-code/core';
-import { appDataDir, HistoryStore, ProjectService, type PlanFiles } from '@idea-to-code/store';
+import {
+  buildViewModel,
+  loadFromTexts,
+  summarizePlan,
+  type AppState,
+  type EditResult,
+  type HistoryView,
+  type UiOperation,
+} from '@idea-to-code/core';
+import { appDataDir, buildHistoryView, HistoryStore, ProjectService, type PlanFiles, type RestoreResult } from '@idea-to-code/store';
 import { homedir } from 'node:os';
 import * as vscode from 'vscode';
 import { looksLikePlan, planFileIn } from './planPaths.js';
@@ -76,6 +84,23 @@ export class ProjectHost implements vscode.Disposable {
     return result.ok ? { ok: true, created: result.created } : { ok: false, message: result.message };
   }
 
+  /** Brings back an earlier version, as a new version. */
+  restoreVersion(snapshotId: string): Promise<EditResult> {
+    return this.restoring((service) => service.rollback(snapshotId, { actor: 'user' }));
+  }
+
+  /** Reverses the change the user was told about, which `latest` names. */
+  undo(latest: string): Promise<EditResult> {
+    return this.restoring((service) => service.undo({ actor: 'user', expectedLatest: latest }));
+  }
+
+  private async restoring(run: (service: ProjectService) => Promise<RestoreResult>): Promise<EditResult> {
+    if (!this.trust.isTrusted || !this.serviceInstance) return { ok: false, message: 'This plan is view-only until you trust the folder.' };
+    const result = await run(this.serviceInstance);
+    await this.refresh();
+    return result.ok ? { ok: true } : { ok: false, message: result.message };
+  }
+
   /** Records the level being looked at, for agents. In Restricted Mode nothing is recorded. */
   async publishLevel(level: string): Promise<void> {
     try {
@@ -124,7 +149,23 @@ export class ProjectHost implements vscode.Disposable {
     const texts = await readTexts(files);
     const plan = summarizePlan(texts);
     this.showDiagnostics(folder, plan.problems);
-    this.publish({ kind: 'plan', trusted, folder: folder.name, plan, model: buildViewModel(loadFromTexts(texts)) });
+    const history = await this.readHistory();
+    this.publish({ kind: 'plan', trusted, folder: folder.name, plan, model: buildViewModel(loadFromTexts(texts)), history });
+  }
+
+  /** Null in Restricted Mode. A history that can't be read says so, and the plan still shows. */
+  private async readHistory(): Promise<HistoryView | null> {
+    if (!this.serviceInstance) return null;
+    const empty = { sessions: [], older: 0, undo: null };
+    const history = this.serviceInstance.projectHistory;
+    if (!history) return { ...empty, problem: "History isn't available for this plan right now." };
+    try {
+      return buildHistoryView(await history.listSessions(), await history.listSnapshots());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log.warn(`couldn't read history: ${message}`);
+      return { ...empty, problem: `History couldn't be read: ${message}` };
+    }
   }
 
   /** Only the first folder with a plan is used. */

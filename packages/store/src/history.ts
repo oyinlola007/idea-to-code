@@ -234,7 +234,10 @@ export class ProjectHistory {
     return files;
   }
 
-  private recordFiles(input: RecordInput & { restoredFrom?: string }, files: Record<string, string>): Promise<RecordResult> {
+  private recordFiles(
+    input: RecordInput & { restoredFrom?: string; undo?: boolean },
+    files: Record<string, string>,
+  ): Promise<RecordResult> {
     return this.locked(async () => {
       const { state } = await this.readIndex();
       const latest = state.snapshots.at(-1);
@@ -263,6 +266,7 @@ export class ProjectHistory {
         files,
         ...(input.summary === undefined ? {} : { summary: input.summary }),
         ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
+        ...(input.undo === true ? { undo: true } : {}),
       };
       await this.append([...events, snapshot]);
       await this.refreshFingerprint(input.texts);
@@ -353,7 +357,7 @@ export class ProjectHistory {
    */
   async restore(
     id: string,
-    input: { actor: string; sessionId?: string; summary?: string },
+    input: { actor: string; sessionId?: string; summary?: string; undo?: boolean },
   ): Promise<RecordResult & { files: Record<string, string> }> {
     const { snapshot, files, missing } = await this.readSnapshot(id);
     if (missing.length > 0)
@@ -365,6 +369,7 @@ export class ProjectHistory {
         actor: input.actor,
         summary: input.summary ?? `Restored the version from ${new Date(snapshot.at).toISOString()}`,
         restoredFrom: id,
+        ...(input.undo === undefined ? {} : { undo: input.undo }),
         ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
       },
       snapshot.files,
