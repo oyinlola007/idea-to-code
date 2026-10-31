@@ -4,7 +4,8 @@ import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PlanNode, type PlanFlowNode } from '../src/chart/nodes.js';
-import { Breadcrumb } from '../src/ui/Breadcrumb.js';
+import { CrumbTrail } from '../src/ui/Breadcrumb.js';
+import { crumbsToHide } from '../src/ui/crumbLayout.js';
 import { kindIcon, kindLabel } from '../src/chart/icons.js';
 import { approxMeasure, nodeBox } from '../src/layout/metrics.js';
 import { progressText } from '../src/ui/ProgressRing.js';
@@ -93,7 +94,8 @@ describe('cards', () => {
 
 describe('breadcrumb', () => {
   const crumb = (id: string) => ({ id, title: `Title ${id}` });
-  const render = (ids: string[]) => renderToStaticMarkup(<Breadcrumb crumbs={ids.map(crumb)} onGo={() => undefined} />);
+  const render = (ids: string[], hide = 0) =>
+    renderToStaticMarkup(<CrumbTrail crumbs={ids.map(crumb)} hide={hide} onGo={() => undefined} />);
 
   it('links every level above the current one, starting at the overview', () => {
     const html = render(['overview', 'a', 'b']);
@@ -107,13 +109,43 @@ describe('breadcrumb', () => {
     expect(render(['overview'])).not.toContain('crumbs__link');
   });
 
-  it('collapses the middle of a long path but keeps the overview reachable', () => {
-    const html = render(['overview', 'a', 'b', 'c', 'd']);
-    expect(html).toContain('…');
+  it('shows every level however deep, while nothing needs hiding', () => {
+    const html = render(['overview', 'a', 'b', 'c', 'd', 'e', 'f']);
+    expect(html).not.toContain('crumbs__more');
+    for (const id of ['overview', 'a', 'b', 'c', 'd', 'e', 'f']) expect(html).toContain(`Title ${id}`);
+  });
+
+  it('moves hidden levels behind a button, keeping the main map and the nearest levels', () => {
+    const html = render(['overview', 'a', 'b', 'c', 'd'], 2);
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('aria-label="Show 2 more levels"');
     expect(html).toContain('title="Title a › Title b"');
-    expect(html).toContain('Title overview');
-    expect(html).toContain('Title c');
-    expect(html).toContain('Title d');
+    expect(html).toContain('>Title overview<');
+    expect(html).toContain('>Title c<');
+    expect(html).toContain('Title d</span>');
+  });
+});
+
+describe('crumbsToHide', () => {
+  it('hides nothing while the whole path fits, however deep', () => {
+    expect(crumbsToHide([100, 100, 100, 100, 100, 100], 600, 30)).toBe(0);
+    expect(crumbsToHide([], 100, 30)).toBe(0);
+  });
+
+  it('hides from just after the main map, only as many as needed, allowing for the menu button', () => {
+    expect(crumbsToHide([100, 100, 100, 100, 100], 499, 30)).toBe(1);
+    expect(crumbsToHide([100, 100, 100, 100, 100], 430, 30)).toBe(1);
+    expect(crumbsToHide([100, 100, 100, 100, 100], 429, 30)).toBe(2);
+  });
+
+  it('counts each level by its real width', () => {
+    expect(crumbsToHide([100, 20, 300, 100], 500, 30)).toBe(2);
+  });
+
+  it('always keeps the main map and the current level, however narrow', () => {
+    expect(crumbsToHide([100, 100, 100, 100], 10, 30)).toBe(2);
+    expect(crumbsToHide([100, 100], 10, 30)).toBe(0);
+    expect(crumbsToHide([100], 10, 30)).toBe(0);
   });
 });
 
