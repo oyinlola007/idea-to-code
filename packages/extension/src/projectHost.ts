@@ -1,7 +1,7 @@
 // The workspace's plan, as the rest of the extension sees it: which folder, what it
 // says, and (when trusted) the ProjectService behind it. Every change takes one path,
 // refresh(), so the sidebar, tabs and Problems panel can't disagree.
-import { summarizePlan, type AppState } from '@idea-to-code/core';
+import { buildViewModel, loadFromTexts, summarizePlan, type AppState } from '@idea-to-code/core';
 import { appDataDir, HistoryStore, ProjectService, type PlanFiles } from '@idea-to-code/store';
 import { homedir } from 'node:os';
 import * as vscode from 'vscode';
@@ -104,9 +104,10 @@ export class ProjectHost implements vscode.Disposable {
     const files = new VsCodePlanFiles(folder.uri);
     if (trusted && !this.serviceInstance) await this.startService(folder, files);
 
-    const plan = summarizePlan(await readTexts(files));
+    const texts = await readTexts(files);
+    const plan = summarizePlan(texts);
     this.showDiagnostics(folder, plan.problems);
-    this.publish({ kind: 'plan', trusted, folder: folder.name, plan });
+    this.publish({ kind: 'plan', trusted, folder: folder.name, plan, model: buildViewModel(loadFromTexts(texts)) });
   }
 
   /** Only the first folder with a plan is used. */

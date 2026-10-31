@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import * as vscode from 'vscode';
 import type { ExtensionApi } from '../../src/extension.js';
 import { VsCodePlanFiles } from '../../src/vscodePlanFiles.js';
+import type { ChartRendered } from '../../src/webviewConnection.js';
 
 const failures: string[] = [];
 
@@ -49,6 +50,21 @@ function nextRender(
       clearTimeout(timer);
       sub.dispose();
       resolve();
+    });
+  });
+}
+
+function nextChart(api: ExtensionApi, level: string, ms = 30_000): Promise<ChartRendered> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      sub.dispose();
+      reject(new Error(`the chart didn't draw ${level}`));
+    }, ms);
+    const sub = api.events.onChartRendered((rendered) => {
+      if (rendered.level !== level) return;
+      clearTimeout(timer);
+      sub.dispose();
+      resolve(rendered);
     });
   });
 }
@@ -111,6 +127,35 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     await rendered;
     noWebviewErrors(api);
     api.closeApp();
+    await closeAll();
+  });
+
+  await step('the chart draws every level through the blob worker, within 960px', async () => {
+    const levels = Object.keys(planState(api).model.levels);
+    check(levels.length > 3, `${String(levels.length)} levels`);
+    const first = nextChart(api, 'overview');
+    await vscode.commands.executeCommand('ideaToCode.openApp');
+    const seen = [await first];
+    for (const level of levels.filter((l) => l !== 'overview')) {
+      const rendered = nextChart(api, level);
+      api.showLevel(level);
+      seen.push(await rendered);
+    }
+    for (const r of seen) {
+      check(r.workerMode === 'blob', `${r.level} used ${r.workerMode}`);
+      check(r.width > 0 && r.width <= 960, `${r.level} is ${String(r.width)}px wide`);
+      check(r.nodes > 0, `${r.level} has no nodes`);
+    }
+    noWebviewErrors(api);
+    api.closeApp();
+    await closeAll();
+  });
+
+  await step('opening a feature file shows that feature', async () => {
+    const rendered = nextChart(api, 'bookings');
+    await vscode.commands.executeCommand('vscode.open', bookings);
+    await rendered;
+    noWebviewErrors(api);
     await closeAll();
   });
 

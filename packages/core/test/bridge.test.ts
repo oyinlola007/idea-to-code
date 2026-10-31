@@ -4,6 +4,7 @@ import { AppState, HostMessage, summarizePlan, WebviewMessage } from '../src/bri
 import { newPlanMap } from '../src/guide.js';
 import { errorsOf, validateProject } from '../src/validate.js';
 import { loadFromTexts } from '../src/load.js';
+import { buildViewModel } from '../src/viewModel.js';
 import { fixturePath } from './helpers.js';
 
 let toolshed: Record<string, string>;
@@ -30,7 +31,8 @@ describe('summarizePlan', () => {
   });
 
   it('produces state the bridge accepts', () => {
-    const message = { type: 'state', state: { kind: 'plan', trusted: true, folder: 'toolshed', plan: summarizePlan(toolshed) } };
+    const model = buildViewModel(loadFromTexts(toolshed));
+    const message = { type: 'state', state: { kind: 'plan', trusted: true, folder: 'toolshed', plan: summarizePlan(toolshed), model } };
     expect(HostMessage.safeParse(message).success).toBe(true);
   });
 });
@@ -53,7 +55,7 @@ describe('bridge messages', () => {
       { type: 'log', level: 'error', message: 'boot: failed' },
       { type: 'rendered', kind: 'plan', features: 5, problems: 3 },
       { type: 'init-plan' },
-      { type: 'open-problem', file: 'plan/map.yaml', line: 3 },
+      { type: 'open-source', file: 'plan/map.yaml', line: 3 },
     ]) {
       expect(WebviewMessage.safeParse(m).success, m.type).toBe(true);
     }
@@ -67,9 +69,10 @@ describe('bridge messages', () => {
       { type: 'nope' },
       { type: 'ready', extra: 1 },
       { type: 'log', level: 'debug', message: 'x' },
+      { type: 'chart-rendered', level: 'overview', nodes: 1, width: 1, height: 1, layoutMs: 1, workerMode: 'url' },
       { type: 'log', level: 'info', message: 'x'.repeat(2001) },
-      { type: 'open-problem', file: 'plan/map.yaml', line: 0 },
-      { type: 'open-problem', file: 'plan/map.yaml' },
+      { type: 'open-source', file: 'plan/map.yaml', line: 0 },
+      { type: 'open-source', file: 'plan/map.yaml' },
     ]) {
       expect(WebviewMessage.safeParse(m).success, JSON.stringify(m)).toBe(false);
     }

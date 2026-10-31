@@ -17,6 +17,7 @@ export interface ExtensionApi {
   trees: { features: FeatureTree; sessions: SessionTree };
   optionalApis: OptionalApis;
   closeApp(): void;
+  showLevel(level: string): void;
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -58,6 +59,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     optionalApis,
     closeApp: () => {
       app.close();
+    },
+    showLevel: (level) => {
+      app.showLevel(level);
     },
   };
 }

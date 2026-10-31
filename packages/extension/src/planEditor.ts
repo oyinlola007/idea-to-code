@@ -1,6 +1,7 @@
 // Plan files open as a chart, like markdown's preview but as the editor itself. Only
 // real plan files stay: anything else, or the "text" setting, quietly reopens as text.
 import * as vscode from 'vscode';
+import { featureOfPlanFile } from './planPaths.js';
 import type { ProjectHost } from './projectHost.js';
 import { connectWebview, type WebviewEvents } from './webviewConnection.js';
 import { webviewHtml, webviewOptions } from './webviewHtml.js';
@@ -23,13 +24,14 @@ export class PlanEditor implements vscode.CustomTextEditorProvider {
     const requested = this.chartRequested.delete(key);
     await this.host.settled();
     const setting = vscode.workspace.getConfiguration('ideaToCode.planFiles').get<string>('openAs');
-    if (this.host.planFile(document.uri) === undefined || (setting === 'text' && !requested)) {
+    const planFile = this.host.planFile(document.uri);
+    if (planFile === undefined || (setting === 'text' && !requested)) {
       await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default', panel.viewColumn);
       panel.dispose();
       return;
     }
     panel.webview.options = webviewOptions(this.context.extensionUri);
-    const connection = connectWebview(panel.webview, this.host, this.events, this.log);
+    const connection = connectWebview(panel.webview, this.host, this.events, this.log, featureOfPlanFile(planFile));
     panel.webview.html = webviewHtml(panel.webview, this.context.extensionUri);
     panel.onDidDispose(() => {
       connection.dispose();

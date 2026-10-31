@@ -11,22 +11,31 @@ export interface Rendered {
   problems: number;
 }
 
+export type ChartRendered = Extract<WebviewMessage, { type: 'chart-rendered' }>;
+
 /** What the pages report back; the in-editor tests read these. */
 export class WebviewEvents implements vscode.Disposable {
   private readonly renderedEmitter = new vscode.EventEmitter<Rendered>();
+  private readonly chartEmitter = new vscode.EventEmitter<ChartRendered>();
   readonly onRendered = this.renderedEmitter.event;
+  readonly onChartRendered = this.chartEmitter.event;
   readonly errors: string[] = [];
 
   fireRendered(rendered: Rendered): void {
     this.renderedEmitter.fire(rendered);
   }
 
+  fireChartRendered(rendered: ChartRendered): void {
+    this.chartEmitter.fire(rendered);
+  }
+
   dispose(): void {
     this.renderedEmitter.dispose();
+    this.chartEmitter.dispose();
   }
 }
 
-async function openProblem(host: ProjectHost, file: string, line: number, log: vscode.LogOutputChannel): Promise<void> {
+async function openSource(host: ProjectHost, file: string, line: number, log: vscode.LogOutputChannel): Promise<void> {
   const folder = host.activeFolder;
   if (!folder) return;
   try {
@@ -37,7 +46,14 @@ async function openProblem(host: ProjectHost, file: string, line: number, log: v
   }
   const uri = vscode.Uri.joinPath(folder.uri, ...file.split('/'));
   const position = new vscode.Position(line - 1, 0);
-  await vscode.commands.executeCommand('vscode.openWith', uri, 'default', { selection: new vscode.Range(position, position) });
+  await vscode.commands.executeCommand('vscode.openWith', uri, 'default', {
+    viewColumn: vscode.ViewColumn.Beside,
+    selection: new vscode.Range(position, position),
+  });
+}
+
+export interface WebviewConnection extends vscode.Disposable {
+  showLevel(level: string): void;
 }
 
 export function connectWebview(
@@ -45,11 +61,16 @@ export function connectWebview(
   host: ProjectHost,
   events: WebviewEvents,
   log: vscode.LogOutputChannel,
-): vscode.Disposable {
-  const send = (state: AppState) => {
-    void webview.postMessage(HostMessage.parse({ type: 'state', state }));
+  startLevel?: string,
+): WebviewConnection {
+  const post = (message: HostMessage) => {
+    void webview.postMessage(HostMessage.parse(message));
   };
-  return vscode.Disposable.from(
+  const send = (state: AppState) => {
+    post({ type: 'state', state });
+  };
+  let start = startLevel;
+  const subscription = vscode.Disposable.from(
     host.onDidChange(send),
     webview.onDidReceiveMessage(async (raw: unknown) => {
       const parsed = WebviewMessage.safeParse(raw);
@@ -62,23 +83,37 @@ export function connectWebview(
         case 'ready':
           await host.settled();
           send(host.state);
+          if (start !== undefined) post({ type: 'show-level', level: start });
+          start = undefined;
           break;
         case 'log':
-          if (message.level === 'error') {
-            events.errors.push(message.message);
-            log.error(`webview: ${message.message}`);
-          } else log.info(`webview: ${message.message}`);
+          if (message.level === 'error') events.errors.push(message.message);
+          log[message.level](`webview: ${message.message}`);
           break;
         case 'rendered':
           events.fireRendered({ kind: message.kind, features: message.features, problems: message.problems });
           break;
+        case 'chart-rendered':
+          events.fireChartRendered(message);
+          log.info(
+            `rendered ${message.level}: ${String(message.nodes)} nodes, ${String(message.width)}px wide, ${message.layoutMs.toFixed(0)}ms via ${message.workerMode}`,
+          );
+          break;
         case 'init-plan':
           await vscode.commands.executeCommand('ideaToCode.initPlan');
           break;
-        case 'open-problem':
-          await openProblem(host, message.file, message.line, log);
+        case 'open-source':
+          await openSource(host, message.file, message.line, log);
           break;
       }
     }),
   );
+  return {
+    showLevel(level) {
+      post({ type: 'show-level', level });
+    },
+    dispose() {
+      subscription.dispose();
+    },
+  };
 }

@@ -1,13 +1,14 @@
 // The app tab: one per window, restored after a reload by the serializer.
 import * as vscode from 'vscode';
 import type { ProjectHost } from './projectHost.js';
-import { connectWebview, type WebviewEvents } from './webviewConnection.js';
+import { connectWebview, type WebviewConnection, type WebviewEvents } from './webviewConnection.js';
 import { webviewHtml, webviewOptions } from './webviewHtml.js';
 
 export const APP_VIEW_TYPE = 'ideaToCode.app';
 
 export class AppPanel {
   private panel: vscode.WebviewPanel | undefined;
+  private connection: WebviewConnection | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -24,10 +25,12 @@ export class AppPanel {
     };
     panel.webview.options = webviewOptions(this.context.extensionUri);
     const connection = connectWebview(panel.webview, this.host, this.events, this.log);
+    this.connection = connection;
     panel.webview.html = webviewHtml(panel.webview, this.context.extensionUri);
     panel.onDidDispose(() => {
       connection.dispose();
       this.panel = undefined;
+      this.connection = undefined;
     });
   }
 
@@ -41,6 +44,12 @@ export class AppPanel {
       retainContextWhenHidden: false,
     });
     this.attach(panel);
+  }
+
+  /** Shows the tab at a level. */
+  showLevel(level: string): void {
+    this.show();
+    this.connection?.showLevel(level);
   }
 
   close(): void {

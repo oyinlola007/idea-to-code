@@ -15,3 +15,8 @@ export function planFileIn(folderPath: string, filePath: string): string | undef
 export function looksLikePlan(mapText: string | null): boolean {
   return mapText !== null && /^project\s*:/m.test(mapText);
 }
+
+/** The feature a plan file belongs to, if it isn't the map. */
+export function featureOfPlanFile(planFile: string): string | undefined {
+  return /^plan\/features\/([^/]+)\.yaml$/.exec(planFile)?.[1];
+}
