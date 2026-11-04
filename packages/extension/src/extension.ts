@@ -7,6 +7,7 @@ import { ChatStore } from './chat/transcript.js';
 import { VsCodeChatFiles } from './chat/vscodeChatFiles.js';
 import { CHAT_VIEW_ID, ChatViewProvider, pickChat } from './chatView.js';
 import { detectOptionalApis, type OptionalApis } from './detect.js';
+import { registerMcpServer } from './mcpServer.js';
 import { initPlan, type InitOptions } from './initPlan.js';
 import { ModelHost } from './models/modelHost.js';
 import { PlanEditor, reopenAsText } from './planEditor.js';
@@ -68,6 +69,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const outside = host.onDidReveal((reveal) => {
     app.reveal(reveal, false);
   });
+  const mcp = registerMcpServer(context, host, trust);
+  if (mcp) context.subscriptions.push(mcp);
 
   context.subscriptions.push(
     log,

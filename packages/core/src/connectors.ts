@@ -11,7 +11,7 @@ export interface Connector {
   path: string;
   /** Switched on by default when a plan is set up. */
   defaultOn: boolean;
-  /** MCP connectors stay false until the server is published (ITC-18), so nobody gets a broken server entry. */
+  /** MCP connectors stay false until the server is published to npm (ITC-27), so nobody gets a broken server entry. */
   available: boolean;
 }
 

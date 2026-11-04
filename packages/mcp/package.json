@@ -1,23 +1,34 @@
 {
-  "name": "@idea-to-code/mcp",
+  "name": "idea-to-code-mcp",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "MCP server for idea-to-code plans, published as idea-to-code-mcp.",
+  "description": "MCP server for idea-to-code plans: plan software as nested flowcharts with any coding agent.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },
   "bin": {
     "idea-to-code-mcp": "./dist/main.js"
   },
+  "files": [
+    "dist/main.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "node esbuild.mjs"
-  },
-  "dependencies": {
-    "@idea-to-code/core": "workspace:*"
+    "build": "node esbuild.mjs",
+    "smoke": "node esbuild.mjs && tsx scripts/smoke.ts",
+    "claude-check": "node esbuild.mjs && tsx scripts/claude-check.ts"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "@idea-to-code/core": "workspace:*",
+    "@idea-to-code/store": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "esbuild": "0.28.2",
+    "zod": "4.6.7"
   }
 }

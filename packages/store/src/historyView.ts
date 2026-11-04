@@ -8,6 +8,24 @@ export const MAX_LISTED_CHANGES = 300;
 
 const FOUND = 'Already in the folder';
 
+/** MCP clients by the name they send, as people know them. */
+const AGENTS: [RegExp, string][] = [
+  [/^claude-code\b/, 'Claude Code'],
+  [/^claude-ai\b|^claude desktop\b/, 'Claude Desktop'],
+  [/^cursor\b/, 'Cursor'],
+  [/^visual studio code\b|^vscode\b/, 'VS Code'],
+  [/^codex\b/, 'Codex'],
+  [/^windsurf\b/, 'Windsurf'],
+  [/^unknown$/, 'An agent'],
+];
+
+/** The agent behind an MCP change. A name we don't know is shown as the client sent it. */
+export function agentName(actor: string): string {
+  const name = actor.trim();
+  const lower = name.toLowerCase();
+  return AGENTS.find(([pattern]) => pattern.test(lower))?.[1] ?? (name || 'An agent');
+}
+
 function whoMade(snapshot: Snapshot): string {
   switch (snapshot.source) {
     case 'ui':
@@ -15,7 +33,7 @@ function whoMade(snapshot: Snapshot): string {
     case 'agent':
       return 'Built-in agent';
     case 'mcp':
-      return `${snapshot.actor} via MCP`;
+      return agentName(snapshot.actor);
     case 'external':
       return snapshot.parent === null ? FOUND : 'Outside edit';
     case 'restore':

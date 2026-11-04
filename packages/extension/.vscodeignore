@@ -1,5 +1,6 @@
 **
 !dist/extension.cjs
+!dist/mcp.mjs
 !dist/webview/**
 !media/**
 !package.json

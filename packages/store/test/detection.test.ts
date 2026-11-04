@@ -1,4 +1,4 @@
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, realpath, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { HistoryStore } from '../src/history.js';
@@ -116,12 +116,26 @@ describe('outside changes', () => {
     expect(service.projectHistory?.record.id).not.toBe(first.projectHistory?.record.id);
   });
 
+  it('shares one history between the folder and a link to it, as the editor and an agent may see it', async () => {
+    const first = await open();
+    const link = `${root}-link`;
+    await symlink(root, link);
+    try {
+      const viaLink = await ProjectService.open({ files: new NodePlanFiles(link), store: new HistoryStore(dataDir), root: link });
+      expect(viaLink.openStatus.status).toBe('existing');
+      expect(viaLink.projectHistory?.record.id).toBe(first.projectHistory?.record.id);
+    } finally {
+      await rm(link);
+    }
+  });
+
   it('picks its history back up when the folder really moves', async () => {
     const first = await open();
+    const original = await realpath(root);
     const moved = await projectFolder();
     await rm(root, { recursive: true });
     const service = await ProjectService.open({ files: new NodePlanFiles(moved), store: new HistoryStore(dataDir), root: moved });
-    expect(service.openStatus).toEqual({ status: 'relinked', previousPath: root });
+    expect(service.openStatus).toEqual({ status: 'relinked', previousPath: original });
     expect(service.projectHistory?.record.id).toBe(first.projectHistory?.record.id);
     await expect(service.projectHistory?.listSnapshots()).resolves.toHaveLength(1);
   });

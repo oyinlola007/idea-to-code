@@ -1,6 +1,7 @@
 // Bundles the extension host as CommonJS, which every VS Code core from the
 // engine floor (1.90) up can load (ITC-3), and copies the webview in beside it:
-// webviews may only load files from inside the extension.
+// webviews may only load files from inside the extension. The MCP server comes
+// too, so the editor can start it without anything installed.
 import { cpSync, rmSync } from 'node:fs';
 import { build } from 'esbuild';
 
@@ -19,3 +20,4 @@ await build({
 
 rmSync('dist/webview', { recursive: true, force: true });
 cpSync('../webview/dist', 'dist/webview', { recursive: true });
+cpSync('../mcp/dist/main.js', 'dist/mcp.mjs');

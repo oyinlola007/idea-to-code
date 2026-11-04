@@ -187,7 +187,13 @@
           "description": "How plan files open: as a chart, or as text."
         }
       }
-    }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "ideaToCode.mcp",
+        "label": "idea-to-code"
+      }
+    ]
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -209,6 +215,7 @@
     "@types/vscode": "1.90.0",
     "@vscode/test-electron": "3.1.0",
     "esbuild": "0.28.2",
+    "idea-to-code-mcp": "workspace:*",
     "tsx": "4.23.15"
   },
   "capabilities": {

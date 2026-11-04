@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, Snapshot } from '../src/events.js';
-import { buildHistoryView, MAX_LISTED_CHANGES, undoStep } from '../src/historyView.js';
+import { agentName, buildHistoryView, MAX_LISTED_CHANGES, undoStep } from '../src/historyView.js';
 
 const session = (id: string, kind: Session['kind'] = 'activity', title?: string): Session => ({
   id,
@@ -25,6 +25,22 @@ function chain(items: (Partial<Snapshot> & { id: string; state?: string })[]): S
   }));
 }
 
+describe('agent names', () => {
+  it('names the agents people know, whatever the client calls itself', () => {
+    expect(agentName('claude-code')).toBe('Claude Code');
+    expect(agentName('cursor-vscode')).toBe('Cursor');
+    expect(agentName('Visual Studio Code')).toBe('VS Code');
+    expect(agentName('codex-mcp-client')).toBe('Codex');
+    expect(agentName('claude-ai')).toBe('Claude Desktop');
+  });
+
+  it('shows any other name as sent, and no name as an agent', () => {
+    expect(agentName('my-own-agent')).toBe('my-own-agent');
+    expect(agentName('unknown')).toBe('An agent');
+    expect(agentName('  ')).toBe('An agent');
+  });
+});
+
 describe('who made a change', () => {
   it('says it in words, for every source', () => {
     const view = buildHistoryView(
@@ -34,7 +50,7 @@ describe('who made a change', () => {
         { id: 'b', source: 'external', actor: 'unknown' },
         { id: 'c', source: 'ui', actor: 'user' },
         { id: 'd', source: 'agent', actor: 'claude-opus' },
-        { id: 'e', source: 'mcp', actor: 'Claude Code' },
+        { id: 'e', source: 'mcp', actor: 'claude-code' },
         { id: 'f', source: 'restore', actor: 'user', restoredFrom: 'a' },
         { id: 'g', source: 'repair', actor: 'repair' },
       ]),
@@ -44,7 +60,7 @@ describe('who made a change', () => {
       'Outside edit',
       'You',
       'Built-in agent',
-      'Claude Code via MCP',
+      'Claude Code',
       'You',
       'Repair',
     ]);
@@ -155,9 +171,9 @@ describe('undo', () => {
   it('tells the UI what it would reverse', () => {
     const view = buildHistoryView(
       [session('s1')],
-      chain([{ id: 'a' }, { id: 'b', source: 'mcp', actor: 'Claude Code', summary: "Removed feature 'Fees'" }]),
+      chain([{ id: 'a' }, { id: 'b', source: 'mcp', actor: 'claude-code', summary: "Removed feature 'Fees'" }]),
     );
-    expect(view.undo).toEqual({ latest: 'b', who: 'Claude Code via MCP', summary: "Removed feature 'Fees'" });
+    expect(view.undo).toEqual({ latest: 'b', who: 'Claude Code', summary: "Removed feature 'Fees'" });
   });
 
   it('stops safely when a damaged log has lost the version it needs', () => {

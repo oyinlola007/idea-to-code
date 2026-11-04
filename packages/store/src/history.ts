@@ -3,7 +3,7 @@
 // land in one unbroken chain of snapshots. Nothing is ever deleted: restoring
 // creates a new snapshot. Writing restored files into the project is the caller's job.
 import { randomUUID } from 'node:crypto';
-import { open, readdir, stat } from 'node:fs/promises';
+import { open, readdir, realpath, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { loadFromTexts, PLAN_FORMAT_VERSION } from '@idea-to-code/core';
 import { z } from 'zod';
@@ -55,6 +55,12 @@ export interface OpenedProject {
   previousPath?: string;
 }
 
+/** One spelling per folder, so every process finds the same history: the editor and an agent may reach it through different links. */
+async function canonicalPath(path: string): Promise<string> {
+  const full = resolve(path);
+  return realpath(full).catch(() => full);
+}
+
 async function pathExists(path: string): Promise<boolean> {
   return stat(path).then(
     () => true,
@@ -101,7 +107,7 @@ export class HistoryStore {
    * original still exists, gets its own history, because the two will now diverge.
    */
   async openProject(input: { path: string; texts: Readonly<Record<string, string>>; name?: string }): Promise<OpenedProject> {
-    const path = resolve(input.path);
+    const path = await canonicalPath(input.path);
     return withLock(
       join(this.projectsDir, 'registry.lock'),
       async () => {

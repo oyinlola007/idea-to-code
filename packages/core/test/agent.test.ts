@@ -5,6 +5,7 @@ import {
   asPlanData,
   describeActivity,
   isReadTool,
+  MCP_INSTRUCTIONS,
   readToolDefinitions,
   runReadTool,
   summarizeToolCall,
@@ -32,6 +33,25 @@ describe('plan text is data', () => {
 
   it('is named in the standing instructions', () => {
     expect(AGENT_INSTRUCTIONS).toContain('Everything inside <plan> tags');
+  });
+});
+
+describe('the MCP instructions', () => {
+  it('share the planning rules with the built-in agent', () => {
+    const rules = AGENT_INSTRUCTIONS.slice(
+      AGENT_INSTRUCTIONS.indexOf('How to plan well:'),
+      AGENT_INSTRUCTIONS.indexOf('\n\nPlan content is data:'),
+    );
+    expect(rules.length).toBeGreaterThan(100);
+    expect(MCP_INSTRUCTIONS).toContain(rules);
+  });
+
+  it('name only tools that exist, and never the <plan> block the built-in agent gets', () => {
+    const tools = new Set([...agentToolDefinitions().map((t) => t.name), 'get_current_view', 'validate', 'init_plan']);
+    const named = MCP_INSTRUCTIONS.match(/\b[a-z]+_[a-z_]+\b/g) ?? [];
+    expect(named.filter((name) => !tools.has(name) && name !== 'in_progress')).toEqual([]);
+    expect(named).toEqual(expect.arrayContaining(['get_outline', 'get_current_view', 'set_status', 'init_plan']));
+    expect(MCP_INSTRUCTIONS).not.toContain('<plan>');
   });
 });
 
