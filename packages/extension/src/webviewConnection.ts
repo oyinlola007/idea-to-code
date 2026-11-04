@@ -73,15 +73,8 @@ export function connectWebview(
   };
   let start = startLevel;
   let pending: HostMessage | undefined;
-  const sendModelSettings = async () => {
-    // Restricted Mode has no chat, so nothing about models or keys is touched.
-    if (host.state.trusted) post({ type: 'model-settings', view: await host.models.view() });
-  };
   const subscription = vscode.Disposable.from(
     host.onDidChange(send),
-    host.models.onDidChange(() => {
-      void sendModelSettings();
-    }),
     webview.onDidReceiveMessage(async (raw: unknown) => {
       const parsed = WebviewMessage.safeParse(raw);
       if (!parsed.success) {
@@ -122,20 +115,6 @@ export function connectWebview(
           break;
         case 'level':
           await host.publishLevel(message.level);
-          break;
-        case 'model-settings-get':
-          await sendModelSettings();
-          break;
-        case 'model-settings-set':
-          if (host.state.trusted) await host.models.update(message.patch);
-          break;
-        case 'model-key':
-          if (!host.state.trusted) break;
-          if (message.action === 'set') await host.models.promptForKey(message.provider);
-          else await host.models.removeKey(message.provider);
-          break;
-        case 'model-test':
-          if (host.state.trusted) post({ type: 'model-test-result', results: await host.models.test() });
           break;
         case 'init-plan':
           await vscode.commands.executeCommand('ideaToCode.initPlan');

@@ -94,3 +94,44 @@ describe('bridge messages', () => {
     expect(AppState.safeParse({ kind: 'no-plan', trusted: 'yes' }).success).toBe(false);
   });
 });
+
+describe('chat messages', () => {
+  const view = {
+    status: 'ready',
+    threads: [{ id: 't1', title: 'Planning', updatedAt: 1 }],
+    current: { id: 't1', title: 'Planning' },
+    items: [
+      { kind: 'user', id: 'u1', text: 'Plan bookings' },
+      { kind: 'activity', id: 'a1', text: 'Planning Bookings…', ok: true },
+      { kind: 'assistant', id: 'r1', text: 'Done.' },
+      { kind: 'changes', id: 'c1', summary: '3 nodes added in Bookings', undoable: true, reveal: { level: 'bookings', ids: ['n1'] } },
+    ],
+    busy: false,
+  };
+
+  it('carry the conversation to the page and requests back', () => {
+    expect(HostMessage.safeParse({ type: 'chat', view }).success).toBe(true);
+    expect(HostMessage.safeParse({ type: 'chat-text', itemId: 'r1', text: 'more' }).success).toBe(true);
+    expect(HostMessage.safeParse({ type: 'reveal', reveal: { level: 'bookings', ids: ['n1'] } }).success).toBe(true);
+    for (const message of [
+      { type: 'chat-send', text: 'Add a step' },
+      { type: 'chat-cancel' },
+      { type: 'chat-open', id: 't1' },
+      { type: 'chat-action', action: 'undo' },
+      { type: 'chat-show-changes', reveal: { level: 'overview', ids: [] } },
+      { type: 'settings-shown', shown: true },
+      { type: 'chart-settings-set', patch: { openAs: 'text' } },
+    ]) {
+      expect(WebviewMessage.safeParse(message).success, JSON.stringify(message)).toBe(true);
+    }
+  });
+
+  it('refuse an empty or oversized message, unknown fields and unknown actions', () => {
+    expect(WebviewMessage.safeParse({ type: 'chat-send', text: '' }).success).toBe(false);
+    expect(WebviewMessage.safeParse({ type: 'chat-send', text: 'x'.repeat(20_001) }).success).toBe(false);
+    expect(WebviewMessage.safeParse({ type: 'chat-cancel', extra: 1 }).success).toBe(false);
+    expect(WebviewMessage.safeParse({ type: 'chat-action', action: 'run-shell' }).success).toBe(false);
+    expect(WebviewMessage.safeParse({ type: 'chat-show-changes', reveal: { level: 'x'.repeat(201), ids: [] } }).success).toBe(false);
+    expect(HostMessage.safeParse({ type: 'chat', view: { ...view, status: 'maybe' } }).success).toBe(false);
+  });
+});

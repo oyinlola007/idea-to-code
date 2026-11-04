@@ -192,12 +192,9 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     check(state.plan.done === 7 && state.plan.total === 15, `progress ${String(state.plan.done)}/${String(state.plan.total)}`);
   });
 
-  await step('sidebar lists features and shows the views', async () => {
+  await step('the sidebar opens, and opening the plan was recorded as a first version', async () => {
     await vscode.commands.executeCommand('workbench.view.extension.ideaToCode');
-    const features = api.trees.features.getChildren();
-    check(features.length === 5, `${String(features.length)} features`);
-    check(api.trees.features.getTreeItem(features[0] ?? never()).command?.command === 'ideaToCode.openApp', 'opens the app');
-    await until('an activity session', () => api.trees.sessions.getChildren().length > 0);
+    await until('an activity session', () => (planState(api).history?.sessions.length ?? 0) > 0);
   });
 
   await step('app tab renders through the validated bridge, with no CSP errors', async () => {
@@ -337,12 +334,10 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     check((await readFile(bookingsPath, 'utf8')) === original, 'second undo did not go further back');
   });
 
-  await step('the sidebar lists sessions, and one opens the history', async () => {
-    const [session] = api.trees.sessions.getChildren();
-    check(session !== undefined, 'no session listed');
+  await step('History opens at a session', async () => {
+    const [session] = planState(api).history?.sessions ?? [];
+    check(session !== undefined, 'no session in history');
     if (!session) return;
-    const item = api.trees.sessions.getTreeItem(session);
-    check(item.command?.command === 'ideaToCode.showHistory', 'the session does not open history');
     await vscode.commands.executeCommand('ideaToCode.showHistory', session.id);
     check(api.events.errors.length === 0, `page errors: ${api.events.errors.join('; ')}`);
   });
@@ -495,6 +490,78 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     await service?.setConnector('cursor-rule', false);
     check(!(await exists(join(root, '.cursor', 'rules', 'plan.mdc'))), 'rule not removed');
   });
+
+  await step('the chat sidebar opens with no page errors', async () => {
+    await vscode.commands.executeCommand('ideaToCode.chat.focus');
+    await sleep(1500);
+    noWebviewErrors(api);
+  });
+
+  await step('the chat plans through tools: one agent version per turn, kept in this editor, chart edits paused meanwhile', async () => {
+    const key = 'sk-test-secret-value';
+    const server = await startFakeModelServer(key);
+    const models = api.host.models.service;
+    const history = () => api.host.service?.projectHistory?.listSnapshots() ?? Promise.resolve([]);
+    try {
+      // One model for both tiers, so no deciding call is made.
+      await models.update({ provider: 'custom', baseUrl: server.baseUrl, large: 'fake', small: 'fake' });
+      await models.saveKey('custom', key);
+      await until('a model', () => api.chat.view().status === 'ready');
+      const before = (await history()).length;
+      server.script.push(
+        {
+          text: 'Planning it.',
+          calls: [
+            {
+              name: 'fill_flow',
+              input: { flowId: 'reminders', nodes: [{ key: 'a', type: 'step', label: 'Text the borrower' }], edges: [] },
+            },
+          ],
+        },
+        { text: 'Reminders is planned.', delayMs: 2000 },
+      );
+      const turn = api.chat.send('Plan the reminders');
+      await until('the change on the chart, before it is written', () => {
+        const state = planState(api);
+        return state.agentBusy === true && state.plan.features.find((f) => f.id === 'reminders')?.planned === false;
+      });
+      check(!(await exists(join(root, 'plan', 'features', 'reminders.yaml'))), 'written before the turn ended');
+      const refused = await api.host.applyEdit('set_status', { id: 'pick-dates', status: 'done' });
+      check(!refused.ok && (refused.message ?? '').includes('agent is working'), `an edit during the turn: ${JSON.stringify(refused)}`);
+      await turn;
+      const after = await history();
+      check(after.length === before + 1, `${String(after.length - before)} versions recorded`);
+      check(after.at(-1)?.source === 'agent' && after.at(-1)?.actor === 'built-in agent', `recorded as ${after.at(-1)?.source ?? '?'}`);
+      check((await readFile(join(root, 'plan', 'features', 'reminders.yaml'), 'utf8')).includes('Text the borrower'), 'not written');
+      await until('edits back on', () => planState(api).agentBusy !== true);
+      const index = new TextDecoder().decode(
+        await vscode.workspace.fs.readFile(vscode.Uri.joinPath(api.chatStorage, 'chats', 'index.json')),
+      );
+      check(index.includes('Planning'), `chat not kept: ${index}`);
+      check(!(await readdir(root)).includes('chats'), 'chats written into the project');
+      const items = api.chat.view().items;
+      check(items.at(-1)?.kind === 'changes', `items: ${items.map((i) => i.kind).join(', ')}`);
+
+      // Stopped midway: what was done is kept, as one version.
+      server.script.push(
+        { calls: [{ name: 'set_status', input: { id: 'pick-dates', status: 'in_progress' } }] },
+        { text: 'slow', delayMs: 15_000 },
+      );
+      const stopped = api.chat.send('Start on pick dates');
+      await until('the change made', () => planState(api).agentBusy === true && server.bodies.length >= 4);
+      await sleep(500);
+      api.chat.cancel();
+      await stopped;
+      const last = (await history()).at(-1);
+      check(last?.source === 'agent' && (last.summary ?? '').includes('Pick dates'), `after stopping: ${last?.summary ?? 'nothing'}`);
+      noWebviewErrors(api);
+    } finally {
+      await server.close();
+      await models.removeKey('custom');
+      const settings = vscode.workspace.getConfiguration('ideaToCode.models');
+      for (const name of ['provider', 'baseUrl', 'tiers']) await settings.update(name, undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
 }
 
 function never(): never {
@@ -505,7 +572,6 @@ async function emptyScenario(api: ExtensionApi, root: string): Promise<void> {
   await step('with no plan, nothing is created and the page offers to start', async () => {
     await api.host.settled();
     check(api.host.state.kind === 'no-plan', api.host.state.kind);
-    check(api.trees.features.getChildren().length === 0, 'features listed');
     const rendered = nextRender(api, (r) => r.kind === 'no-plan');
     await vscode.commands.executeCommand('ideaToCode.openApp');
     await rendered;
@@ -575,7 +641,6 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
     await api.host.publishLevel('bookings');
     check(!(await exists(join(data, 'projects'))), 'the level was recorded');
     check(!(await exists(join(data, 'objects'))), 'blobs were written');
-    check(api.trees.sessions.getChildren().length === 0, 'sessions listed');
     check(planState(api).history === null, 'history was sent to the page');
     const refused = await api.host.undo('anything');
     check(!refused.ok, 'undo ran in Restricted Mode');
@@ -597,6 +662,12 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
     );
     check((await readdir(root)).join() === before.join(), 'files were created');
     check(!(await exists(join(root, 'plan', 'GUIDE.md'))), 'guide written');
+  });
+
+  await step('the chat is off in Restricted Mode, and takes no message', async () => {
+    await until('the chat to see Restricted Mode', () => api.chat.view().status === 'untrusted');
+    await api.chat.send('Plan something');
+    check(api.chat.view().items.length === 0, 'a message was taken');
   });
 
   await step('trusting the folder turns everything on, without reopening', async () => {

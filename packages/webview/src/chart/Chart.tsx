@@ -1,6 +1,7 @@
 // One level on the canvas. Lays it out (cached per level and model version),
 // keeps the fit-width viewport, and plays the transition that shows where the
-// level came from: zoom into the opened card, or out to the card we left.
+// level came from: zoom into the opened card, or out to the card we left. After
+// the agent's changes, it centres on the changed cards and rings them for a moment.
 import { ReactFlow, useReactFlow, type Viewport } from '@xyflow/react';
 import { forwardRef, useCallback, useEffect, useEffectEvent, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { Level, VNode } from '@idea-to-code/core';
@@ -13,8 +14,12 @@ import { settle } from './settle.js';
 
 type Timed = Placed & { ms: number };
 
-/** How a level arrives. `keep` is the same level after the plan changed: you stay where you were. */
-export type Entry = { kind: 'in' } | { kind: 'out'; focus?: string } | { kind: 'fade' } | { kind: 'keep' };
+/**
+ * How a level arrives. `keep` is the same level after the plan changed: you stay where you were.
+ * `reveal` points out cards, on a new level or the one already shown.
+ */
+export type Entry =
+  { kind: 'in' } | { kind: 'out'; focus?: string } | { kind: 'fade' } | { kind: 'keep' } | { kind: 'reveal'; ids: string[] };
 
 export interface ChartHandle {
   leave(kind: 'in' | 'out', nodeId?: string): Promise<void>;
@@ -49,6 +54,8 @@ const LEAVE_MS = 200;
 const LEAVE_LIMIT_MS = LEAVE_MS + 80;
 const ENTER_MS = 280;
 const ARRIVED_MS = 1400;
+const REVEALED_MS = 3000;
+const REVEAL_PAN_MS = 400;
 /** How long a click on a card that opens waits to see whether it's a double-click. */
 const DOUBLE_CLICK_MS = 250;
 const SETTLE_MS = ENTER_MS + 20;
@@ -64,13 +71,15 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
   const cache = useRef(new Map<string, Timed>());
   const [placed, setPlaced] = useState<{ key: string; levelId: string; placed: Timed } | null>(null);
   const [phase, setPhase] = useState<'shown' | 'leaving' | 'entering'>('entering');
-  const [arrived, setArrived] = useState<string | null>(null);
+  /** Cards ringed for a moment: the one we came back to, or the agent's changes. */
+  const [ringed, setRinged] = useState<{ ids: string[]; kind: 'arrived' | 'revealed' } | null>(null);
+  const revealed = useRef<Entry | null>(null);
   const userZoomed = useRef(false);
   const leaving = useRef(false);
   const shownLevel = useRef<string | null>(null);
   const pendingClick = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  /** The card the current level was centred on (coming back up), kept for resizes. */
-  const focusRef = useRef<string | undefined>(undefined);
+  /** The cards the current level was centred on, kept for resizes. */
+  const focusRef = useRef<string[] | undefined>(undefined);
 
   const key = `${version}:${level.id}`;
 
@@ -102,20 +111,35 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     };
   }, [key, version, level, layouter, measure, onError]);
 
-  const targetViewport = useCallback((p: Placed, focus?: string): Viewport => {
+  const targetViewport = useCallback((p: Placed, focus?: string[]): Viewport => {
     const el = wrapper.current;
     const w = el?.clientWidth ?? 960;
     const h = el?.clientHeight ?? 800;
-    const n = focus ? p.nodes.find((x) => x.id === focus) : undefined;
-    // Back up one level: centre the card we came from, so a big plan doesn't lose your place.
-    return fitWidthViewport(p.width, w, 32, n ? { container: { h }, graphH: p.height, focus: { y: n.y, h: n.box.height } } : undefined);
+    const cards = focus ? p.nodes.filter((x) => focus.includes(x.id)) : [];
+    if (cards.length === 0) return fitWidthViewport(p.width, w, 32);
+    // Centre the cards that matter (the one we came back to, or the changes), so a big plan doesn't lose your place.
+    const top = Math.min(...cards.map((n) => n.y));
+    const bottom = Math.max(...cards.map((n) => n.y + n.box.height));
+    return fitWidthViewport(p.width, w, 32, { container: { h }, graphH: p.height, focus: { y: top, h: bottom - top } });
   }, []);
 
   /** Shows a newly placed level with its entry transition, reading the props of that moment. */
-  const showPlaced = useEffectEvent((p: Timed) => {
+  const showPlaced = useEffectEvent((p: Timed): 'arrived' | 'revealed' | undefined => {
     leaving.current = false;
     const sameLevel = shownLevel.current === level.id;
     shownLevel.current = level.id;
+    const info = { level: level.id, nodes: p.nodes.length, layoutMs: p.ms, width: p.width, height: p.height };
+    if (entry.kind === 'reveal') revealed.current = entry;
+    if (entry.kind === 'reveal' && sameLevel) {
+      // Already here: glide to the changes.
+      focusRef.current = entry.ids;
+      userZoomed.current = false;
+      void flow.setViewport(targetViewport(p, entry.ids), { duration: reducedMotion() ? 0 : REVEAL_PAN_MS });
+      setRinged({ ids: entry.ids, kind: 'revealed' });
+      setPhase('shown');
+      onRendered(info);
+      return 'revealed';
+    }
     if (entry.kind === 'keep' && sameLevel) {
       // Scrolled or zoomed: leave everything alone. Otherwise only recentre for the new width.
       if (!userZoomed.current) {
@@ -123,15 +147,17 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
         void flow.setViewport({ ...target, y: flow.getViewport().y });
       }
       setPhase('shown');
-      onRendered({ level: level.id, nodes: p.nodes.length, layoutMs: p.ms, width: p.width, height: p.height });
+      onRendered(info);
       return undefined;
     }
     const focus = entry.kind === 'out' ? entry.focus : undefined;
-    const target = targetViewport(p, focus);
-    focusRef.current = focus;
+    const ids = entry.kind === 'reveal' ? entry.ids : focus === undefined ? undefined : [focus];
+    const target = targetViewport(p, ids);
+    focusRef.current = ids;
     userZoomed.current = false;
-    setArrived(focus ?? null);
-    if (!reducedMotion() && entry.kind !== 'fade') {
+    const kind = entry.kind === 'reveal' ? 'revealed' : 'arrived';
+    setRinged(ids ? { ids, kind } : null);
+    if (!reducedMotion() && entry.kind !== 'fade' && entry.kind !== 'reveal') {
       const el = wrapper.current;
       const cx = (el?.clientWidth ?? 960) / 2;
       const n = focus ? p.nodes.find((x) => x.id === focus) : undefined;
@@ -148,21 +174,36 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
       void flow.setViewport(target);
       setPhase('shown');
     }
-    onRendered({ level: level.id, nodes: p.nodes.length, layoutMs: p.ms, width: p.width, height: p.height });
-    return focus;
+    onRendered(info);
+    return ids ? kind : undefined;
   });
 
+  /** A new ring, with how long it stays. */
+  const [ringing, setRinging] = useState<{ ms: number } | null>(null);
+  const ring = useCallback((kind: 'arrived' | 'revealed' | undefined) => {
+    if (kind) setRinging({ ms: kind === 'revealed' ? REVEALED_MS : ARRIVED_MS });
+  }, []);
   useEffect(() => {
     if (placed?.key !== key) return;
-    const focus = showPlaced(placed.placed);
-    if (focus === undefined) return;
+    ring(showPlaced(placed.placed));
+  }, [placed, key, ring]);
+
+  // Changes pointed out on the level already shown, which isn't laid out again.
+  useEffect(() => {
+    if (entry.kind !== 'reveal' || revealed.current === entry || placed?.key !== key || shownLevel.current !== level.id) return;
+    ring(showPlaced(placed.placed));
+  }, [entry, placed, key, level.id, ring]);
+
+  // The ring is a pointer, not a state: it goes after a moment.
+  useEffect(() => {
+    if (!ringing) return;
     const timer = setTimeout(() => {
-      setArrived(null);
-    }, ARRIVED_MS);
+      setRinged(null);
+    }, ringing.ms);
     return () => {
       clearTimeout(timer);
     };
-  }, [placed, key]);
+  }, [ringing]);
 
   // Keep the selected card visible beside the details panel (320px + margins).
   const keepSelectedVisible = useCallback(() => {
@@ -272,11 +313,17 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
           draggable: false,
           connectable: false,
           selected: p.id === selected,
-          data: { node, box: p.box, dimmed: neighbours !== null && !neighbours.has(p.id), arrived: arrived === p.id, onOpen },
+          data: {
+            node,
+            box: p.box,
+            dimmed: neighbours !== null && !neighbours.has(p.id),
+            ring: ringed?.ids.includes(p.id) === true ? ringed.kind : null,
+            onOpen,
+          },
         },
       ];
     });
-  }, [current, level.nodes, selected, neighbours, arrived, onOpen]);
+  }, [current, level.nodes, selected, neighbours, ringed, onOpen]);
 
   const edges = useMemo<PlanFlowEdge[]>(() => {
     if (!current) return [];

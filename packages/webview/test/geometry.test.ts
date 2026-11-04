@@ -128,6 +128,12 @@ describe('geometry helpers', () => {
     expect(narrow.zoom).toBeCloseTo((600 - 64) / 900);
     expect(narrow.y).toBe(32);
   });
+
+  it('centres a focus that fits, and starts at the top of one that does not', () => {
+    const chart = { container: { h: 600 }, graphH: 3000 };
+    expect(fitWidthViewport(400, 960, 32, { ...chart, focus: { y: 1000, h: 200 } }).y).toBe(300 - 1100);
+    expect(fitWidthViewport(400, 960, 32, { ...chart, focus: { y: 1000, h: 900 } }).y).toBe(32 - 1000);
+  });
 });
 
 describe('metrics', () => {

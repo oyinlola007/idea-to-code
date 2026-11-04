@@ -317,8 +317,9 @@ export interface Viewport {
 
 /**
  * Fit the graph's width, never zoom above 1, centre it horizontally, and
- * start at the top. With a focus card (coming back up one level), centre that
- * card vertically instead, without scrolling past either end of the chart.
+ * start at the top. With a focus (a card, or the span of several), centre it
+ * vertically instead, or start at its top when it's taller than the view,
+ * without scrolling past either end of the chart.
  */
 export function fitWidthViewport(
   graphW: number,
@@ -330,7 +331,8 @@ export function fitWidthViewport(
   const vp = { x: (containerW - graphW * zoom) / 2, y: padding, zoom };
   if (center) {
     const { container, graphH, focus } = center;
-    const centred = container.h / 2 - (focus.y + focus.h / 2) * zoom;
+    const fits = focus.h * zoom <= container.h - padding * 2;
+    const centred = fits ? container.h / 2 - (focus.y + focus.h / 2) * zoom : padding - focus.y * zoom;
     const lowest = Math.min(padding, container.h - graphH * zoom - padding);
     vp.y = Math.max(lowest, Math.min(padding, centred));
   }

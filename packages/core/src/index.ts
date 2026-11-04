@@ -1,5 +1,6 @@
 // @idea-to-code/core: the plan format. Pure functions over file contents; the
 // extension, the MCP server and agents' tools all go through here.
+export * from './agent.js';
 export * from './bridge.js';
 export * from './connectors.js';
 export * from './diff.js';
@@ -8,9 +9,11 @@ export { generateGuide, newPlanMap } from './guide.js';
 export * from './ids.js';
 export * from './jsonSchema.js';
 export * from './load.js';
+export * from './mapView.js';
 export { applyOperation, OPERATIONS } from './opDefinitions.js';
 export type { OpErrorCode, OpFailure, Operation, OpRequest, OpResult, OpSuccess } from './operations.js';
 export * from './progress.js';
+export * from './reveal.js';
 export * from './schema.js';
 export * from './tools.js';
 export * from './validate.js';

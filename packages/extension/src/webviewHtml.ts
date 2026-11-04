@@ -11,7 +11,10 @@ export function webviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions 
   return { enableScripts: true, localResourceRoots: [webviewRoot(extensionUri)] };
 }
 
-export function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+/** Which page the bundle draws: the app (chart) or the sidebar chat. */
+export type WebviewKind = 'app' | 'chat';
+
+export function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri, view: WebviewKind = 'app'): string {
   const nonce = randomBytes(16).toString('base64');
   const src = webview.cspSource;
   const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(webviewRoot(extensionUri), name)).toString();
@@ -33,7 +36,7 @@ export function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): 
 <link rel="stylesheet" href="${asset('style.css')}">
 <title>idea-to-code</title>
 </head>
-<body>
+<body data-view="${view}">
 <div id="root"></div>
 <script nonce="${nonce}">
   // Boot probe: without it, a load failure or CSP block is a blank tab with no error.

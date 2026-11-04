@@ -1,53 +1,38 @@
-// Every change to the plan, by who, grouped by session, with a way back to any of them.
+// Every change to the plan, grouped by session, newest first, with a way back to any
+// version. Each change is one row: what changed, then who and when.
 import type { HistoryEntry, HistoryView } from '@idea-to-code/core';
 import { useEffect, useRef, useState } from 'react';
 import { whenText } from './time.js';
 
 interface Props {
   history: HistoryView;
-  /** A session to scroll to, when opened from the sidebar. */
+  /** A session to scroll to, e.g. from the chat. */
   focusSession: string | undefined;
   onRestore: (snapshotId: string) => void;
   onClose: () => void;
 }
 
-function restoreHeading(entry: HistoryEntry): string | null {
-  if (entry.source !== 'restore') return null;
+/** A restore says what it brought back; anything else says what changed. */
+function what(entry: HistoryEntry): string {
+  if (entry.source !== 'restore') return entry.summary;
   if (entry.undo === true) return 'Undid a change';
   return entry.restoredFromAt === undefined ? 'Restored an earlier version' : `Restored the version from ${whenText(entry.restoredFromAt)}`;
 }
 
-function Entry({ entry, latest, onRestore }: { entry: HistoryEntry; latest: boolean; onRestore: () => void }) {
+function Row({ entry, sessionTitle, onRestore }: { entry: HistoryEntry; sessionTitle: string; onRestore: () => void }) {
   const [confirming, setConfirming] = useState(false);
-  const heading = restoreHeading(entry);
+  // Who made it is already the session's title, unless this row is someone else's.
+  const meta = entry.who === sessionTitle ? whenText(entry.at) : `${entry.who} · ${whenText(entry.at)}`;
   return (
-    <li className="history__entry">
-      {heading !== null && <p className="history__restored">{heading}</p>}
-      <p className="history__what">{entry.summary}</p>
-      <div className="history__meta">
-        <span>
-          {entry.who} · {whenText(entry.at)}
-        </span>
-        {latest && <span className="history__now">Latest</span>}
-        {!entry.current && !confirming && (
-          <button
-            type="button"
-            className="history__restore"
-            onClick={() => {
-              setConfirming(true);
-            }}
-          >
-            Restore to this point
-          </button>
-        )}
-      </div>
-      {confirming && (
-        <div className="history__confirm">
-          <p>The plan goes back to how it was here. Later changes stay in history, so you can undo this.</p>
-          <div>
+    <li className="history__row">
+      <div className="history__text">
+        <p className="history__what">{what(entry)}</p>
+        {confirming ? (
+          <div className="history__line">
+            <span>Go back to this version?</span>
             <button
               type="button"
-              className="button button--primary"
+              className="history__action history__action--strong"
               autoFocus
               onClick={() => {
                 setConfirming(false);
@@ -58,7 +43,7 @@ function Entry({ entry, latest, onRestore }: { entry: HistoryEntry; latest: bool
             </button>
             <button
               type="button"
-              className="button button--secondary"
+              className="history__action"
               onClick={() => {
                 setConfirming(false);
               }}
@@ -66,7 +51,30 @@ function Entry({ entry, latest, onRestore }: { entry: HistoryEntry; latest: bool
               Cancel
             </button>
           </div>
-        </div>
+        ) : (
+          <div className="history__line">
+            <span>{meta}</span>
+            {!entry.current && (
+              <button
+                type="button"
+                className="history__action history__restore"
+                onClick={() => {
+                  setConfirming(true);
+                }}
+              >
+                Restore
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {entry.current && (
+        <span
+          className="codicon codicon-check history__current"
+          role="img"
+          aria-label="The plan matches this version"
+          title="The plan matches this version"
+        />
       )}
     </li>
   );
@@ -90,35 +98,31 @@ export function HistoryPanel({ history, focusSession, onRestore, onClose }: Prop
 
   return (
     <aside ref={panel} className="details history" aria-label="History">
-      <header className="details__header">
-        <span className="details__kind">
-          <span className="codicon codicon-history" aria-hidden="true" />
-          History
-        </span>
+      <header className="history__header">
+        <h2>History</h2>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close history" title="Close (Esc)">
           <span className="codicon codicon-close" aria-hidden="true" />
         </button>
       </header>
       {history.problem !== undefined && <p className="history__note">{history.problem}</p>}
-      {history.problem === undefined && history.sessions.length === 0 && (
-        <p className="history__note">No changes yet. They appear here as the plan changes.</p>
-      )}
+      {history.problem === undefined && history.sessions.length === 0 && <p className="history__note">No changes yet.</p>}
       {history.sessions.map((session) => (
         <section
           key={session.id}
           ref={session.id === focusSession ? focused : undefined}
-          className={`history__session${session.id === focusSession ? ' history__session--focus' : ''}`}
+          className={`history__group${session.id === focusSession ? ' history__group--focus' : ''}`}
+          aria-label={session.title}
         >
           <h3>
-            <span>{session.title}</span>
-            <span className="history__opened">{whenText(session.openedAt)}</span>
+            {session.title}
+            <span> · {whenText(session.openedAt)}</span>
           </h3>
           <ol>
             {session.entries.map((entry) => (
-              <Entry
+              <Row
                 key={entry.id}
                 entry={entry}
-                latest={entry.id === newest}
+                sessionTitle={session.title}
                 onRestore={() => {
                   restoring.current = true;
                   onRestore(entry.id);

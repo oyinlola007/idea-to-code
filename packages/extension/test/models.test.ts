@@ -176,12 +176,12 @@ describe('what the chat gets', () => {
 
   it('has a different default per tier, and a choice per provider that survives switching', async () => {
     const models = service({ provider: 'openai' }, { 'ideaToCode.key.openai': SECRET, 'ideaToCode.key.google': SECRET });
-    await expect(models.model('large')).resolves.toMatchObject({ model: 'gpt-5.5' });
-    await expect(models.model('small')).resolves.toMatchObject({ model: 'gpt-5.4-mini' });
+    await expect(models.model('large')).resolves.toMatchObject({ model: 'gpt-6.1-sol' });
+    await expect(models.model('small')).resolves.toMatchObject({ model: 'gpt-6.1-terra' });
 
     await models.update({ small: 'gpt-5.4-nano' });
     await models.update({ provider: 'google' });
-    expect((await models.view()).small).toBe('gemini-flash-latest');
+    expect((await models.view()).small).toBe('gemini-3.6-flash');
     await models.update({ provider: 'openai' });
     expect((await models.view()).small).toBe('gpt-5.4-nano');
   });

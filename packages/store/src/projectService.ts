@@ -47,6 +47,26 @@ export type ServiceEvent =
 
 export type ApplyResult = (OpSuccess & { snapshotId?: string; summary: string }) | { ok: false; code: string; message: string };
 
+export type BatchResult =
+  | {
+      ok: true;
+      /** Operations that changed the plan. */
+      applied: number;
+      /** Operations the plan no longer allowed, by their position in the batch. */
+      skipped: { index: number; message: string }[];
+      changed: string[];
+      deleted: string[];
+      /** The plan just before the batch, and after it. */
+      before: Texts;
+      texts: Texts;
+      summary: string;
+      warnings: string[];
+      snapshotId?: string;
+      /** The history session it was recorded under, which may not be the one asked for. */
+      sessionId?: string;
+    }
+  | { ok: false; code: string; message: string };
+
 export type RestoreResult =
   | { ok: true; changed: string[]; deleted: string[]; snapshotId?: string; warnings: string[] }
   | { ok: false; code: string; message: string };
@@ -304,6 +324,76 @@ export class ProjectService {
           ok: false,
           code: 'conflict',
           message: `the plan files kept changing while saving (tried ${MAX_TRIES} times). Read the plan again and retry`,
+        };
+      });
+    } catch (err) {
+      if (err instanceof StoreError) return { ok: false, code: err.code, message: err.message };
+      throw err;
+    }
+  }
+
+  /**
+   * Applies a whole agent turn: the operations run in order against the plan on disk,
+   * which is written once and recorded as one version. The turn was previewed against
+   * the plan as it was then; an operation that the plan no longer allows (someone else
+   * changed it meanwhile) is skipped and reported, and the rest still apply.
+   */
+  async applyBatch(requests: readonly OpRequest[], context: EditContext): Promise<BatchResult> {
+    const warnings: string[] = [];
+    try {
+      return await this.guarded(warnings, async () => {
+        for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
+          await this.recordDrift(warnings);
+          const before = await this.readPlan();
+          let texts: Texts = before;
+          const skipped: { index: number; message: string }[] = [];
+          requests.forEach((request, index) => {
+            const result = applyOperation(texts, request);
+            if (result.ok) texts = result.texts;
+            else skipped.push({ index, message: result.message });
+          });
+          const changed = Object.keys(texts).filter((path) => texts[path] !== before[path]);
+          const deleted = Object.keys(before).filter((path) => texts[path] === undefined);
+          const applied = requests.length - skipped.length;
+          if (changed.length === 0 && deleted.length === 0) {
+            return { ok: true as const, applied, skipped, changed, deleted, before, texts, summary: 'No changes', warnings };
+          }
+          if (!(await this.unchangedSince(before, [...changed, ...deleted]))) continue;
+
+          try {
+            await this.writeAll(before, changed, deleted, texts);
+          } catch (err) {
+            return { ok: false as const, code: 'write-failed', message: `couldn't save the change: ${messageOf(err)}` };
+          }
+          const summary = context.summary ?? describe(before, texts);
+          const snapshot = await this.record(
+            texts,
+            {
+              source: context.source,
+              actor: context.actor,
+              summary,
+              ...(context.sessionId === undefined ? {} : { sessionId: context.sessionId }),
+            },
+            warnings,
+          );
+          this.emit({ type: 'changed', cause: 'operation', summary, ...(snapshot ? { snapshotId: snapshot.id } : {}), changed, deleted });
+          return {
+            ok: true as const,
+            applied,
+            skipped,
+            changed,
+            deleted,
+            before,
+            texts,
+            summary,
+            warnings,
+            ...(snapshot ? { snapshotId: snapshot.id, sessionId: snapshot.session } : {}),
+          };
+        }
+        return {
+          ok: false as const,
+          code: 'conflict',
+          message: `the plan files kept changing while saving (tried ${MAX_TRIES} times). Try again`,
         };
       });
     } catch (err) {

@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { type Project, loadFromTexts } from './load.js';
 import { OVERVIEW, rollup } from './progress.js';
+import { Reveal } from './reveal.js';
 import { indexProject, validateProject } from './validate.js';
 import { ViewModel } from './viewModel.js';
 
@@ -83,9 +84,68 @@ export const AppState = z.discriminatedUnion('kind', [
     model: ViewModel,
     /** Null in Restricted Mode, which records and reads no history. */
     history: HistoryView.nullable(),
+    /** The built-in agent is working: the chart shows its changes so far, and edits wait until it's done. */
+    agentBusy: z.boolean().optional(),
   }),
 ]);
 export type AppState = z.infer<typeof AppState>;
+
+/** Something a chat notice can offer to do. */
+export const ChatAction = z.enum(['open-model-settings', 'init-plan', 'show-history', 'open-plan', 'undo', 'trust', 'open-folder']);
+export type ChatAction = z.infer<typeof ChatAction>;
+
+const ItemId = z.string().max(100);
+
+/** One line of the chat, as the sidebar draws it. A turn starts at a user item. */
+export const ChatItem = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('user'),
+    id: ItemId,
+    text: z.string().max(20_000),
+    /** How the message was handled: the decider's verdict, or a slash command, and the model it went to. */
+    route: z.strictObject({ kind: z.enum(['edit', 'question', 'plan', 'slash']), model: z.string().max(200).optional() }).optional(),
+  }),
+  z.strictObject({ kind: z.literal('assistant'), id: ItemId, text: z.string().max(200_000) }),
+  /** One tool call in words, e.g. "Filled the Reminders flow: 7 steps". */
+  z.strictObject({ kind: z.literal('activity'), id: ItemId, text: z.string().max(500), ok: z.boolean() }),
+  z.strictObject({
+    kind: z.literal('notice'),
+    id: ItemId,
+    text: z.string().max(2000),
+    tone: z.enum(['info', 'error']),
+    action: ChatAction.optional(),
+  }),
+  /** The end of a turn that changed the plan: saved as one version in history. */
+  z.strictObject({
+    kind: z.literal('changes'),
+    id: ItemId,
+    summary: z.string().max(2000),
+    /** The history session it was recorded under, to open History there. */
+    session: z.string().max(100).optional(),
+    /** Changes that couldn't be applied, because the plan changed while the agent worked. */
+    skipped: z.number().int().optional(),
+    cancelled: z.boolean().optional(),
+    /** Still the latest change to the plan, so Undo would reverse exactly this. */
+    undoable: z.boolean().optional(),
+    /** Reversed with the chat's Undo. */
+    undone: z.boolean().optional(),
+    /** Where the changes are on the chart. */
+    reveal: Reveal.optional(),
+  }),
+]);
+export type ChatItem = z.infer<typeof ChatItem>;
+
+export const ChatView = z.strictObject({
+  /** What stands in the way of chatting, if anything: each has one fix, shown as one button. */
+  status: z.enum(['ready', 'no-folder', 'untrusted', 'no-plan', 'no-model']),
+  threads: z.array(z.strictObject({ id: ItemId, title: z.string().max(200), updatedAt: z.number() })),
+  current: z.strictObject({ id: ItemId, title: z.string().max(200) }).nullable(),
+  items: z.array(ChatItem),
+  busy: z.boolean(),
+  /** The model in use, in words, e.g. "gpt-5.5 · your OpenAI key". Absent until one is set up. */
+  model: z.string().max(300).optional(),
+});
+export type ChatView = z.infer<typeof ChatView>;
 
 /** The plan edits the UI may ask for. */
 export const UiOperation = z.enum([
@@ -118,12 +178,6 @@ export type EditResult = z.infer<typeof EditResult>;
 export const ModelTier = z.enum(['large', 'small']);
 export type ModelTier = z.infer<typeof ModelTier>;
 
-const SuggestedModel = z.strictObject({
-  id: z.string(),
-  /** Passed the built-in agent check. */
-  tested: z.boolean(),
-});
-
 /** Everything the settings view shows. It says whether a key is saved, and never holds one. */
 export const ModelSettingsView = z.strictObject({
   /** What's in use: "key" whenever the editor has no models, whatever was chosen before. */
@@ -136,8 +190,9 @@ export const ModelSettingsView = z.strictObject({
       label: z.string(),
       keyRequired: z.boolean(),
       hasKey: z.boolean(),
-      large: z.array(SuggestedModel),
-      small: z.array(SuggestedModel),
+      /** Suggested models, best first. */
+      large: z.array(z.string()),
+      small: z.array(z.string()),
     }),
   ),
   baseUrl: z.string(),
@@ -158,6 +213,17 @@ export const ModelSettingsPatch = z.strictObject({
 });
 export type ModelSettingsPatch = z.infer<typeof ModelSettingsPatch>;
 
+/** The tabs of the settings view. */
+export const SettingsTab = z.enum(['models', 'chart']);
+export type SettingsTab = z.infer<typeof SettingsTab>;
+
+/** How plans are shown. */
+export const ChartSettings = z.strictObject({
+  /** What opening a plan file shows. */
+  openAs: z.enum(['chart', 'text']),
+});
+export type ChartSettings = z.infer<typeof ChartSettings>;
+
 export const ModelTestResult = z.strictObject({
   tier: ModelTier,
   model: z.string(),
@@ -173,9 +239,15 @@ export const HostMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('edit-result'), requestId: z.number().int(), result: EditResult }),
   /** Open the history panel, at a session if one is given. */
   z.strictObject({ type: z.literal('show-history'), session: z.string().optional() }),
-  z.strictObject({ type: z.literal('show-model-settings') }),
+  /** Go to where the agent's changes are and point them out. */
+  z.strictObject({ type: z.literal('reveal'), reveal: Reveal }),
+  z.strictObject({ type: z.literal('show-settings'), tab: SettingsTab.optional() }),
   z.strictObject({ type: z.literal('model-settings'), view: ModelSettingsView }),
   z.strictObject({ type: z.literal('model-test-result'), results: z.array(ModelTestResult) }),
+  z.strictObject({ type: z.literal('chart-settings'), view: ChartSettings }),
+  z.strictObject({ type: z.literal('chat'), view: ChatView }),
+  /** More streamed text for an assistant item, appended to what the page has. */
+  z.strictObject({ type: z.literal('chat-text'), itemId: ItemId, text: z.string().max(20_000) }),
 ]);
 export type HostMessage = z.infer<typeof HostMessage>;
 
@@ -202,8 +274,19 @@ export const WebviewMessage = z.discriminatedUnion('type', [
   /** Asks the host to prompt for a key, in the editor's own box. A key never comes from the page. */
   z.strictObject({ type: z.literal('model-key'), provider: z.string().max(50), action: z.enum(['set', 'remove']) }),
   z.strictObject({ type: z.literal('model-test') }),
+  z.strictObject({ type: z.literal('chart-settings-get') }),
+  z.strictObject({ type: z.literal('chart-settings-set'), patch: ChartSettings.partial() }),
+  /** The chat page switched between the conversation and settings, so its title can follow. */
+  z.strictObject({ type: z.literal('settings-shown'), shown: z.boolean() }),
   z.strictObject({ type: z.literal('init-plan') }),
   z.strictObject({ type: z.literal('open-source'), file: z.string().max(500), line: z.number().int().min(1) }),
+  z.strictObject({ type: z.literal('chat-get') }),
+  z.strictObject({ type: z.literal('chat-send'), text: z.string().min(1).max(20_000) }),
+  z.strictObject({ type: z.literal('chat-cancel') }),
+  z.strictObject({ type: z.literal('chat-new') }),
+  z.strictObject({ type: z.literal('chat-open'), id: ItemId }),
+  z.strictObject({ type: z.literal('chat-action'), action: ChatAction, session: z.string().max(100).optional() }),
+  z.strictObject({ type: z.literal('chat-show-changes'), reveal: Reveal }),
 ]);
 export type WebviewMessage = z.infer<typeof WebviewMessage>;
 

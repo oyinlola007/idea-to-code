@@ -1,12 +1,16 @@
 // The idea-to-code extension: wires the plan host to the views, tabs and commands.
+import type { SettingsTab } from '@idea-to-code/core';
 import * as vscode from 'vscode';
 import { AppPanel } from './appPanel.js';
+import { ChatService } from './chat/chatService.js';
+import { ChatStore } from './chat/transcript.js';
+import { VsCodeChatFiles } from './chat/vscodeChatFiles.js';
+import { CHAT_VIEW_ID, ChatViewProvider, pickChat } from './chatView.js';
 import { detectOptionalApis, type OptionalApis } from './detect.js';
 import { initPlan, type InitOptions } from './initPlan.js';
 import { ModelHost } from './models/modelHost.js';
 import { PlanEditor, reopenAsText } from './planEditor.js';
 import { ProjectHost } from './projectHost.js';
-import { FeatureTree, registerSidebar, SessionTree } from './sidebar.js';
 import { WorkspaceTrust } from './trust.js';
 import { WebviewEvents } from './webviewConnection.js';
 
@@ -15,8 +19,10 @@ export interface ExtensionApi {
   host: ProjectHost;
   trust: WorkspaceTrust;
   events: WebviewEvents;
-  trees: { features: FeatureTree; sessions: SessionTree };
   optionalApis: OptionalApis;
+  chat: ChatService;
+  /** Where this editor keeps chats for the workspace. */
+  chatStorage: vscode.Uri;
   closeApp(): void;
   showLevel(level: string): void;
 }
@@ -32,7 +38,36 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const events = new WebviewEvents();
   const app = new AppPanel(context, host, events, log);
   const editor = new PlanEditor(context, host, events, log);
-  const trees = { features: new FeatureTree(host), sessions: new SessionTree(host) };
+  // Chats stay in this editor's storage for the workspace; without a workspace there's no plan to chat about.
+  const chatStorage = context.storageUri ?? context.globalStorageUri;
+  const chatService = new ChatService({
+    host: {
+      service: () => host.service,
+      state: () => host.state,
+      hasFolder: () => (vscode.workspace.workspaceFolders ?? []).length > 0,
+      level: () => host.currentLevel,
+      setPreview: (texts) => {
+        host.setPreview(texts);
+      },
+      setBusy: (busy) => {
+        host.setAgentBusy(busy);
+      },
+      undo: (latest) => host.undo(latest),
+      reveal: (reveal, bringForward) => {
+        app.reveal(reveal, bringForward);
+      },
+      onDidChange: (listener) => host.onDidChange(listener),
+    },
+    models: { model: (tier) => models.service.model(tier), onDidChange: (listener) => models.onDidChange(listener) },
+    store: new ChatStore(new VsCodeChatFiles(chatStorage)),
+    editor: vscode.env.appName,
+    log,
+  });
+  const chat = new ChatViewProvider(context, chatService, host, log, events);
+  // Claude Code or another agent changed the plan: point it out, as the built-in agent's changes are.
+  const outside = host.onDidReveal((reveal) => {
+    app.reveal(reveal, false);
+  });
 
   context.subscriptions.push(
     log,
@@ -40,18 +75,23 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     models,
     host,
     events,
-    registerSidebar(host, trees),
     app.register(),
     editor.register(),
+    chatService,
+    outside,
+    vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID, chat),
+    vscode.commands.registerCommand('ideaToCode.newChat', async () => {
+      await chatService.newThread();
+      await chat.reveal();
+    }),
+    vscode.commands.registerCommand('ideaToCode.openChat', () => pickChat(chatService, chat)),
     vscode.commands.registerCommand('ideaToCode.openApp', () => {
       app.show();
     }),
     vscode.commands.registerCommand('ideaToCode.showHistory', (session?: string) => {
       app.showHistory(session);
     }),
-    vscode.commands.registerCommand('ideaToCode.openModelSettings', () => {
-      app.showModelSettings();
-    }),
+    vscode.commands.registerCommand('ideaToCode.openSettings', (tab?: SettingsTab) => chat.showSettings(tab)),
     vscode.commands.registerCommand('ideaToCode.initPlan', async (options?: InitOptions) => {
       await initPlan(host, trust, options);
       if (host.state.kind === 'plan') app.show();
@@ -60,12 +100,16 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.commands.registerCommand('ideaToCode.openPreviewToSide', (uri?: vscode.Uri) => editor.openToSide(uri)),
   );
   void host.refresh();
+  void chatService.start().catch((err: unknown) => {
+    log.error(`couldn't open the chat: ${err instanceof Error ? err.message : String(err)}`);
+  });
   return {
     host,
     trust,
     events,
-    trees,
     optionalApis,
+    chat: chatService,
+    chatStorage,
     closeApp: () => {
       app.close();
     },

@@ -82,7 +82,7 @@ export class ModelService {
       const main = this.tiers()[route]?.large;
       return main ?? editorModels[0]?.id ?? '';
     }
-    return isKeyProvider(route) ? (CATALOG[route][tier][0]?.id ?? '') : '';
+    return isKeyProvider(route) ? (CATALOG[route][tier][0] ?? '') : '';
   }
 
   async view(): Promise<ModelSettingsView> {

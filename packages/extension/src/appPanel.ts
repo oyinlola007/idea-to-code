@@ -1,5 +1,5 @@
 // The app tab: one per window, restored after a reload by the serializer.
-import type { HostMessage } from '@idea-to-code/core';
+import type { HostMessage, Reveal } from '@idea-to-code/core';
 import * as vscode from 'vscode';
 import type { ProjectHost } from './projectHost.js';
 import { connectWebview, type WebviewConnection, type WebviewEvents } from './webviewConnection.js';
@@ -28,7 +28,16 @@ export class AppPanel {
     const connection = connectWebview(panel.webview, this.host, this.events, this.log, startLevel);
     this.connection = connection;
     panel.webview.html = webviewHtml(panel.webview, this.context.extensionUri);
+    // The sidebar's Open Plan icon only shows while the tab isn't on screen.
+    const onScreen = (visible: boolean) => {
+      void vscode.commands.executeCommand('setContext', 'ideaToCode.planVisible', visible);
+    };
+    onScreen(panel.visible);
+    panel.onDidChangeViewState(() => {
+      onScreen(panel.visible);
+    });
     panel.onDidDispose(() => {
+      onScreen(false);
       connection.dispose();
       this.panel = undefined;
       this.connection = undefined;
@@ -63,8 +72,11 @@ export class AppPanel {
     this.deliver({ type: 'show-history', ...(session === undefined ? {} : { session }) });
   }
 
-  showModelSettings(): void {
-    this.deliver({ type: 'show-model-settings' });
+  /** Points out changes on the chart: in the tab if it's on screen, or bringing it forward. */
+  reveal(reveal: Reveal, bringForward: boolean): void {
+    const message: HostMessage = { type: 'reveal', reveal };
+    if (bringForward) this.deliver(message);
+    else if (this.panel?.visible === true) this.connection?.deliver(message, false);
   }
 
   private deliver(message: HostMessage): void {

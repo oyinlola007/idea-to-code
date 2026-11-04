@@ -12,7 +12,8 @@ export interface PlanNodeData extends Record<string, unknown> {
   node: VNode;
   box: NodeBox;
   dimmed: boolean;
-  arrived: boolean;
+  /** Ringed for a moment: the card we came back to, or one the agent changed. */
+  ring: 'arrived' | 'revealed' | null;
   onOpen: (node: VNode) => void;
 }
 export type PlanFlowNode = Node<PlanNodeData, 'plan'>;
@@ -143,7 +144,7 @@ function cardClass(node: VNode, selected: boolean, data: PlanNodeData, extra = '
     node.status ? `card--${node.status}` : '',
     selected ? 'is-selected' : '',
     data.dimmed ? 'is-dimmed' : '',
-    data.arrived ? 'is-arrived' : '',
+    data.ring ? `is-${data.ring}` : '',
     extra,
   ]
     .filter(Boolean)

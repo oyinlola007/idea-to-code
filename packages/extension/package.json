@@ -16,7 +16,8 @@
   ],
   "activationEvents": [
     "workspaceContains:plan/map.yaml",
-    "onWebviewPanel:ideaToCode.app"
+    "onWebviewPanel:ideaToCode.app",
+    "onView:ideaToCode.chat"
   ],
   "contributes": {
     "viewsContainers": {
@@ -31,47 +32,12 @@
     "views": {
       "ideaToCode": [
         {
-          "id": "ideaToCode.features",
-          "name": "Features"
-        },
-        {
-          "id": "ideaToCode.sessions",
-          "name": "Sessions"
+          "type": "webview",
+          "id": "ideaToCode.chat",
+          "name": "Chat"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "ideaToCode.features",
-        "contents": "No plan in this workspace yet.\n[Initialize Plan](command:ideaToCode.initPlan)",
-        "when": "workspaceFolderCount > 0 && isWorkspaceTrusted && !ideaToCode.hasPlan"
-      },
-      {
-        "view": "ideaToCode.features",
-        "contents": "No plan in this folder. Trust the folder to create one: Restricted Mode is view-only.",
-        "when": "workspaceFolderCount > 0 && !isWorkspaceTrusted && !ideaToCode.hasPlan"
-      },
-      {
-        "view": "ideaToCode.features",
-        "contents": "Open a folder to plan it.\n[Open Folder](command:vscode.openFolder)",
-        "when": "workspaceFolderCount == 0"
-      },
-      {
-        "view": "ideaToCode.features",
-        "contents": "This plan has no features yet.\n[Open Plan](command:ideaToCode.openApp)",
-        "when": "ideaToCode.hasPlan"
-      },
-      {
-        "view": "ideaToCode.sessions",
-        "contents": "No sessions yet. They appear here as the plan changes.",
-        "when": "isWorkspaceTrusted"
-      },
-      {
-        "view": "ideaToCode.sessions",
-        "contents": "History isn't recorded in Restricted Mode.",
-        "when": "!isWorkspaceTrusted"
-      }
-    ],
     "customEditors": [
       {
         "viewType": "ideaToCode.planEditor",
@@ -101,11 +67,10 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
-        "command": "ideaToCode.openModelSettings",
-        "title": "Model Settings",
+        "command": "ideaToCode.openSettings",
+        "title": "Settings",
         "category": "idea-to-code",
-        "icon": "$(settings-gear)",
-        "enablement": "isWorkspaceTrusted && ideaToCode.hasPlan"
+        "icon": "$(settings-gear)"
       },
       {
         "command": "ideaToCode.showHistory",
@@ -125,6 +90,18 @@
         "title": "Open Preview to the Side",
         "category": "idea-to-code",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "ideaToCode.newChat",
+        "title": "New Chat",
+        "category": "idea-to-code",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ideaToCode.openChat",
+        "title": "Previous Chats",
+        "category": "idea-to-code",
+        "icon": "$(history)"
       }
     ],
     "menus": {
@@ -143,13 +120,23 @@
       "view/title": [
         {
           "command": "ideaToCode.openApp",
-          "when": "view == ideaToCode.features && ideaToCode.hasPlan",
-          "group": "navigation"
+          "when": "view == ideaToCode.chat && ideaToCode.hasPlan && !ideaToCode.planVisible && !ideaToCode.settingsShown",
+          "group": "navigation@0"
         },
         {
-          "command": "ideaToCode.showHistory",
-          "when": "view == ideaToCode.sessions && ideaToCode.hasPlan && isWorkspaceTrusted",
-          "group": "navigation"
+          "command": "ideaToCode.newChat",
+          "when": "view == ideaToCode.chat && ideaToCode.hasPlan && isWorkspaceTrusted && !ideaToCode.settingsShown",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ideaToCode.openChat",
+          "when": "view == ideaToCode.chat && ideaToCode.hasPlan && isWorkspaceTrusted && !ideaToCode.settingsShown",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ideaToCode.openSettings",
+          "when": "view == ideaToCode.chat",
+          "group": "navigation@3"
         }
       ]
     },

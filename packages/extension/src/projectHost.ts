@@ -8,18 +8,21 @@ import {
   type AppState,
   type EditResult,
   type HistoryView,
+  type Reveal,
   type UiOperation,
 } from '@idea-to-code/core';
 import { appDataDir, buildHistoryView, HistoryStore, ProjectService, type PlanFiles, type RestoreResult } from '@idea-to-code/store';
 import { homedir } from 'node:os';
 import * as vscode from 'vscode';
 import type { ModelHost } from './models/modelHost.js';
+import { OutsideEdits } from './outsideEdits.js';
 import { looksLikePlan, planFileIn } from './planPaths.js';
 import type { WorkspaceTrust } from './trust.js';
 import { VsCodePlanFiles } from './vscodePlanFiles.js';
 
 const REFRESH_QUIET_MS = 150;
 const SOURCE = 'idea-to-code';
+const BUSY = 'The built-in agent is working. Edits wait until it finishes.';
 
 async function readTexts(files: PlanFiles): Promise<Record<string, string>> {
   const texts: Record<string, string> = {};
@@ -38,10 +41,23 @@ export class ProjectHost implements vscode.Disposable {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly diagnostics = vscode.languages.createDiagnosticCollection(SOURCE);
   private readonly changed = new vscode.EventEmitter<AppState>();
+  private readonly revealed = new vscode.EventEmitter<Reveal>();
+  private readonly outside = new OutsideEdits((reveal) => {
+    this.revealed.fire(reveal);
+  });
+  /** The refresh waiting to run follows a change made here, which isn't pointed out. */
+  private pendingOwn = false;
   private readonly subscriptions: vscode.Disposable[] = [];
 
   state: AppState;
   readonly onDidChange = this.changed.event;
+  /** Where changes made outside this editor are, once they pause. */
+  readonly onDidReveal = this.revealed.event;
+  /** The level the user last looked at, for the built-in agent. */
+  currentLevel = 'overview';
+  /** The agent's changes so far in a turn, shown on the chart before they're written. */
+  private preview: Record<string, string> | null = null;
+  private agentBusy = false;
 
   constructor(
     private readonly log: vscode.LogOutputChannel,
@@ -59,6 +75,10 @@ export class ProjectHost implements vscode.Disposable {
       watcher.onDidCreate(later),
       watcher.onDidDelete(later),
       vscode.workspace.onDidChangeWorkspaceFolders(later),
+      // A plan file the user saved from the editor they're typing in is their own change.
+      vscode.workspace.onDidSaveTextDocument((document) => {
+        if (this.planFile(document.uri) !== undefined && vscode.window.activeTextEditor?.document === document) this.scheduleRefresh(true);
+      }),
       // Trusting the folder turns everything on, without reopening it.
       trust.onDidGrant(later),
     );
@@ -81,8 +101,9 @@ export class ProjectHost implements vscode.Disposable {
   /** One edit from the UI, recorded in history. The chart has the result by the time this answers. */
   async applyEdit(name: UiOperation, input: unknown): Promise<EditResult> {
     if (!this.trust.isTrusted || !this.serviceInstance) return { ok: false, message: 'This plan is view-only until you trust the folder.' };
+    if (this.agentBusy) return { ok: false, message: BUSY };
     const result = await this.serviceInstance.apply({ name, input }, { source: 'ui', actor: 'user' });
-    await this.refresh();
+    await this.refresh(true);
     return result.ok ? { ok: true, created: result.created } : { ok: false, message: result.message };
   }
 
@@ -98,13 +119,15 @@ export class ProjectHost implements vscode.Disposable {
 
   private async restoring(run: (service: ProjectService) => Promise<RestoreResult>): Promise<EditResult> {
     if (!this.trust.isTrusted || !this.serviceInstance) return { ok: false, message: 'This plan is view-only until you trust the folder.' };
+    if (this.agentBusy) return { ok: false, message: BUSY };
     const result = await run(this.serviceInstance);
-    await this.refresh();
+    await this.refresh(true);
     return result.ok ? { ok: true } : { ok: false, message: result.message };
   }
 
   /** Records the level being looked at, for agents. In Restricted Mode nothing is recorded. */
   async publishLevel(level: string): Promise<void> {
+    this.currentLevel = level;
     try {
       await this.serviceInstance?.projectHistory?.writeView(level);
     } catch (err) {
@@ -112,35 +135,55 @@ export class ProjectHost implements vscode.Disposable {
     }
   }
 
+  /** While the agent works, edits from the chart and history wait; navigation doesn't. */
+  setAgentBusy(busy: boolean): void {
+    this.agentBusy = busy;
+    void this.refresh();
+  }
+
+  /** Shows the agent's changes so far on the chart, or (null) the files again. */
+  setPreview(texts: Record<string, string> | null): void {
+    this.preview = texts;
+    void this.refresh();
+  }
+
   /** Waits for any refresh already under way. */
   settled(): Promise<void> {
     return this.queue;
   }
 
-  private scheduleRefresh(): void {
+  private scheduleRefresh(own = false): void {
+    this.pendingOwn ||= own;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
-      void this.refresh();
+      const ownChange = this.pendingOwn;
+      this.pendingOwn = false;
+      void this.refresh(ownChange);
     }, REFRESH_QUIET_MS);
   }
 
-  /** Finds the plan and brings everything in line with what's on disk. Never rejects. */
-  refresh(): Promise<void> {
+  /**
+   * Finds the plan and brings everything in line with what's on disk. Never rejects.
+   * `own` says the change was made here; while the built-in agent works, every change is its own.
+   */
+  refresh(own = false): Promise<void> {
+    const ownChange = own || this.agentBusy || this.preview !== null;
     this.queue = this.queue
-      .then(() => this.update())
+      .then(() => this.update(ownChange))
       .catch((err: unknown) => {
         this.log.error(`couldn't refresh the plan: ${err instanceof Error ? err.message : String(err)}`);
       });
     return this.queue;
   }
 
-  private async update(): Promise<void> {
+  private async update(own: boolean): Promise<void> {
     const trusted = this.trust.isTrusted;
     const folder = await this.findPlanFolder();
     if (folder?.uri.toString() !== this.folder?.uri.toString()) await this.stopService();
     this.folder = folder;
     // In Restricted Mode nothing is recorded, so opening an untrusted project leaves no trace.
     if (!folder) {
+      this.outside.reset();
       this.diagnostics.clear();
       this.publish({ kind: 'no-plan', trusted });
       return;
@@ -148,11 +191,21 @@ export class ProjectHost implements vscode.Disposable {
     const files = new VsCodePlanFiles(folder.uri);
     if (trusted && !this.serviceInstance) await this.startService(folder, files);
 
-    const texts = await readTexts(files);
-    const plan = summarizePlan(texts);
-    this.showDiagnostics(folder, plan.problems);
+    const disk = await readTexts(files);
+    this.outside.seen(disk, own);
+    // Problems are about the files; the chart shows the agent's preview while it works.
+    this.showDiagnostics(folder, summarizePlan(disk).problems);
+    const texts = this.preview ?? disk;
     const history = await this.readHistory();
-    this.publish({ kind: 'plan', trusted, folder: folder.name, plan, model: buildViewModel(loadFromTexts(texts)), history });
+    this.publish({
+      kind: 'plan',
+      trusted,
+      folder: folder.name,
+      plan: summarizePlan(texts),
+      model: buildViewModel(loadFromTexts(texts)),
+      history,
+      ...(this.agentBusy ? { agentBusy: true } : {}),
+    });
   }
 
   /** Null in Restricted Mode. A history that can't be read says so, and the plan still shows. */
@@ -192,6 +245,7 @@ export class ProjectHost implements vscode.Disposable {
   }
 
   private async stopService(): Promise<void> {
+    this.outside.reset();
     this.stopEvents?.();
     this.stopEvents = undefined;
     await this.serviceInstance?.dispose();
@@ -228,6 +282,8 @@ export class ProjectHost implements vscode.Disposable {
     void this.stopService();
     for (const s of this.subscriptions) s.dispose();
     this.diagnostics.dispose();
+    this.outside.dispose();
     this.changed.dispose();
+    this.revealed.dispose();
   }
 }
