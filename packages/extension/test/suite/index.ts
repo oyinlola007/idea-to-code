@@ -1,113 +1,30 @@
-// Runs inside a real editor. Every step is attempted, so one failure doesn't hide
-// the rest, and all of them are printed at the end.
+// Runs inside a real editor, one scenario per run. Every step is attempted, so one
+// failure doesn't hide the rest, and all of them are printed at the end.
 import { spawn } from 'node:child_process';
-import { appendFile, mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import type { ExtensionApi } from '../../src/extension.js';
 import { OwnKeyProvider } from '../../src/models/ownKey.js';
-import { ModelError, type ChatEvent, type ChatRequest } from '../../src/models/provider.js';
+import { ModelError, type ChatRequest } from '../../src/models/provider.js';
 import { VsCodePlanFiles } from '../../src/vscodePlanFiles.js';
-import type { ChartRendered } from '../../src/webviewConnection.js';
 import { startFakeModelServer } from './fakeModelServer.js';
-
-const failures: string[] = [];
-
-async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ok   ${name}`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    failures.push(`${name}: ${message}`);
-    console.log(`  FAIL ${name}: ${message}`);
-  }
-}
-
-function check(condition: boolean, message: string): void {
-  if (!condition) throw new Error(message);
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function until(what: string, test: () => boolean | Promise<boolean>, ms = 20_000): Promise<void> {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (await test()) return;
-    await sleep(100);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
-
-function nextRender(
-  api: ExtensionApi,
-  want: (r: { kind: string; features: number; problems: number }) => boolean,
-  ms = 20_000,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      sub.dispose();
-      reject(new Error('no matching render from the webview'));
-    }, ms);
-    const sub = api.events.onRendered((rendered) => {
-      if (!want(rendered)) return;
-      clearTimeout(timer);
-      sub.dispose();
-      resolve();
-    });
-  });
-}
-
-function nextChart(api: ExtensionApi, level: string, ms = 30_000): Promise<ChartRendered> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      sub.dispose();
-      reject(new Error(`the chart didn't draw ${level}`));
-    }, ms);
-    const sub = api.events.onChartRendered((rendered) => {
-      if (rendered.level !== level) return;
-      clearTimeout(timer);
-      sub.dispose();
-      resolve(rendered);
-    });
-  });
-}
-
-const exists = (path: string) =>
-  stat(path).then(
-    () => true,
-    () => false,
-  );
-
-function tabsFor(uri: vscode.Uri) {
-  return vscode.window.tabGroups.all
-    .flatMap((group) => group.tabs)
-    .filter((tab) => {
-      const input = tab.input;
-      return (input instanceof vscode.TabInputCustom || input instanceof vscode.TabInputText) && input.uri.toString() === uri.toString();
-    });
-}
-
-const closeAll = async () => {
-  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-  await sleep(200);
-};
-
-function planState(api: ExtensionApi) {
-  const state = api.host.state;
-  if (state.kind !== 'plan') throw new Error(`expected a plan, got ${state.kind}`);
-  return state;
-}
-
-function noWebviewErrors(api: ExtensionApi): void {
-  check(api.events.errors.length === 0, `webview reported: ${api.events.errors.join(' | ')}`);
-}
-
-async function collect(events: AsyncIterable<ChatEvent>): Promise<ChatEvent[]> {
-  const out: ChatEvent[] = [];
-  for await (const event of events) out.push(event);
-  return out;
-}
+import { journeyScenario } from './journey.js';
+import {
+  failures,
+  step,
+  check,
+  sleep,
+  until,
+  nextRender,
+  nextChart,
+  exists,
+  tabsFor,
+  closeAll,
+  planState,
+  noWebviewErrors,
+  collect,
+} from './helpers.js';
 
 async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string): Promise<void> {
   const map = vscode.Uri.joinPath(rootUri, 'plan', 'map.yaml');
@@ -692,6 +609,7 @@ export async function run(): Promise<void> {
 
   if (scenario === 'empty') await emptyScenario(api, folder.uri.fsPath);
   else if (scenario === 'restricted') await restrictedScenario(api, folder.uri, folder.uri.fsPath);
+  else if (scenario === 'journey') await journeyScenario(api, folder.uri.fsPath);
   else await planScenario(api, folder.uri, folder.uri.fsPath);
 
   if (failures.length > 0) throw new Error(`${String(failures.length)} step(s) failed:\n${failures.join('\n')}`);

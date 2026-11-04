@@ -1,6 +1,7 @@
 // Runs the in-editor suite in each editor and scenario, on fresh copies of the
 // Toolshed plan with their own history folders. Usage:
-//   pnpm --filter idea-to-code run test:ext -- [--editor vscode|cursor|vscodium|all] [--version 1.90.0] [--scenario plan|empty|restricted]
+//   pnpm --filter idea-to-code run test:ext -- [--editor vscode|vscodium|cursor|all] [--version 1.90.0] [--scenario plan|empty|restricted|journey]
+// "all" is VS Code and VSCodium: Cursor runs only when asked for by name.
 import { runTests } from '@vscode/test-electron';
 import { build } from 'esbuild';
 import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -15,7 +16,11 @@ delete process.env.ELECTRON_RUN_AS_NODE;
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('../../core/test/fixtures/toolshed', import.meta.url));
 const SUITE = join(ROOT, 'out', 'test', 'suite.cjs');
-const SCENARIOS = ['plan', 'empty', 'restricted'];
+const SCENARIOS = ['plan', 'empty', 'restricted', 'journey'];
+/** Scenarios that start from an empty folder. */
+const EMPTY = new Set(['empty', 'journey']);
+/** Left out of "all" at the founder's request. */
+const ONLY_BY_NAME = new Set(['cursor']);
 
 interface Target {
   executable?: string;
@@ -38,7 +43,7 @@ const { values } = parseArgs({
 async function runOne(label: string, target: Target, scenario: string): Promise<boolean> {
   const tmp = await mkdtemp(join(tmpdir(), 'itc-ext-'));
   const workspace = join(tmp, 'toolshed');
-  if (scenario === 'empty') await mkdir(workspace);
+  if (EMPTY.has(scenario)) await mkdir(workspace);
   else await cp(FIXTURE, workspace, { recursive: true });
   // Forks may reload while setting up a brand-new profile, which ends a run; a persistent one settles.
   const userData = label in EDITORS ? join(tmpdir(), `itc-p-${label}`) : join(tmp, 'u');
@@ -102,7 +107,7 @@ await build({
 
 const targets: [string, Target][] = values.version
   ? [[`vscode-${values.version}`, { version: values.version }]]
-  : Object.entries(EDITORS).filter(([name]) => values.editor === 'all' || name === values.editor);
+  : Object.entries(EDITORS).filter(([name]) => name === values.editor || (values.editor === 'all' && !ONLY_BY_NAME.has(name)));
 const scenarios = values.scenario ? [values.scenario] : SCENARIOS;
 
 const failed: string[] = [];
