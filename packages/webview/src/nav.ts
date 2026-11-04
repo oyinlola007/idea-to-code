@@ -1,5 +1,6 @@
 // Navigation through levels as a pure reducer: an in-tab history (a webview
-// has no address bar), the selection, and the Esc order.
+// has no address bar), the selection, and the Esc order, which a click on the
+// chart's background follows too, short of leaving the level.
 import { OVERVIEW, type LevelId, type ViewModel } from '@idea-to-code/core';
 
 export interface NavState {
@@ -16,6 +17,8 @@ export type NavAction =
   | { type: 'forward' }
   | { type: 'select'; id: string | null }
   | { type: 'closeDetails' }
+  /** A click on the chart's background: like the panel's close button, then clearing the selection. */
+  | { type: 'clickAway' }
   | { type: 'escape' }
   | { type: 'reconcile' };
 
@@ -68,6 +71,9 @@ export function navReducer(model: ViewModel, before?: ViewModel) {
         return { ...s, selected: a.id, details: a.id !== null };
       case 'closeDetails':
         return { ...s, details: false };
+      case 'clickAway':
+        if (s.details) return { ...s, details: false };
+        return s.selected === null ? s : { ...s, selected: null };
       case 'escape':
         if (s.details) return { ...s, details: false };
         if (s.selected) return { ...s, selected: null };

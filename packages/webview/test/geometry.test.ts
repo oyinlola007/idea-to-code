@@ -3,8 +3,10 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   edgesThroughNodes,
+  atZoomLimit,
   fitWidthViewport,
   fromElk,
+  readingViewport,
   labelClearance,
   labelCollisions,
   labelCrossings,
@@ -12,6 +14,10 @@ import {
   roundedPath,
   toElkGraph,
   type Placed,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  ZOOM_STEP,
+  zoomBy,
 } from '../src/layout/geometry.js';
 import { approxMeasure, edgeLabelBox, nodeBox, wrap } from '../src/layout/metrics.js';
 
@@ -159,5 +165,47 @@ describe('metrics', () => {
     const one = edgeLabelBox({ id: 'e', from: 'a', to: 'b', label: 'yes' }, approxMeasure);
     expect(both?.height).toBeGreaterThan(one?.height ?? 0);
     expect(edgeLabelBox({ id: 'e', from: 'a', to: 'b' }, approxMeasure)).toBeNull();
+  });
+});
+
+describe('zoom buttons', () => {
+  const vp = { x: 100, y: 50, zoom: 1 };
+
+  it('steps by a quarter, keeping the point it zooms around in place', () => {
+    const at = { x: 400, y: 300 };
+    const zoomed = zoomBy(vp, ZOOM_STEP, at);
+    expect(zoomed.zoom).toBeCloseTo(1.25);
+    // The graph point under `at` is still under it.
+    expect((at.x - zoomed.x) / zoomed.zoom).toBeCloseTo((at.x - vp.x) / vp.zoom);
+    expect((at.y - zoomed.y) / zoomed.zoom).toBeCloseTo((at.y - vp.y) / vp.zoom);
+    expect(zoomBy(zoomed, 1 / ZOOM_STEP, at)).toMatchObject({ x: expect.closeTo(100) as number, y: expect.closeTo(50) as number, zoom: 1 });
+  });
+
+  it('stops at the limits, and knows when it is there', () => {
+    let z = vp;
+    for (let i = 0; i < 20; i++) z = zoomBy(z, ZOOM_STEP, { x: 0, y: 0 });
+    expect(z.zoom).toBe(ZOOM_MAX);
+    for (let i = 0; i < 40; i++) z = zoomBy(z, 1 / ZOOM_STEP, { x: 0, y: 0 });
+    expect(z.zoom).toBe(ZOOM_MIN);
+    expect(atZoomLimit(ZOOM_MIN, ZOOM_MIN)).toBe(true);
+    expect(atZoomLimit(0.2501, ZOOM_MIN)).toBe(true);
+    expect(atZoomLimit(0.3125, ZOOM_MIN)).toBe(false);
+  });
+
+  it('fits back to the reading view of a short flow: the width fitted, from the top', () => {
+    const view = { w: 960, h: 800 };
+    expect(readingViewport({ w: 400, h: 500 }, view, { x: -300, y: -900, zoom: 2 })).toEqual(fitWidthViewport(400, 960));
+  });
+
+  it('keeps your place in a tall flow, without going past either end', () => {
+    const view = { w: 960, h: 800 };
+    const graph = { w: 400, h: 4000 };
+    // Zoomed in at 2x with graph y=2000 in the middle of the view.
+    const fitted = readingViewport(graph, view, { x: 0, y: 400 - 2000 * 2, zoom: 2 });
+    expect(fitted.zoom).toBe(1);
+    expect((400 - fitted.y) / fitted.zoom).toBeCloseTo(2000);
+    // Near the end, it stops at the last card instead of showing empty space.
+    const end = readingViewport(graph, view, { x: 0, y: 400 - 3990 * 2, zoom: 2 });
+    expect(end.y).toBe(800 - 4000 - 32);
   });
 });

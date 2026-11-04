@@ -80,6 +80,28 @@ describe('navigation', () => {
     expect(navReducer(model)(s, { type: 'escape' })).toEqual(s);
   });
 
+  it('a click on the background closes details and keeps the card highlighted, then clears it, and stays on the level', () => {
+    let s = run([
+      { type: 'open', level: 'a' },
+      { type: 'select', id: 'a-node' },
+    ]);
+    s = navReducer(model)(s, { type: 'clickAway' });
+    expect(s).toMatchObject({ details: false, selected: 'a-node' });
+    expect(s).toEqual(
+      navReducer(model)(
+        run([
+          { type: 'open', level: 'a' },
+          { type: 'select', id: 'a-node' },
+        ]),
+        { type: 'closeDetails' },
+      ),
+    );
+    s = navReducer(model)(s, { type: 'clickAway' });
+    expect(s).toMatchObject({ details: false, selected: null });
+    expect(navReducer(model)(s, { type: 'clickAway' })).toBe(s);
+    expect(currentLevel(s)).toBe('a');
+  });
+
   it('clears the selection when the level changes', () => {
     const s = run([
       { type: 'select', id: 'overview-node' },

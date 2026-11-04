@@ -2,15 +2,27 @@
 // keeps the fit-width viewport, and plays the transition that shows where the
 // level came from: zoom into the opened card, or out to the card we left. After
 // the agent's changes, it centres on the changed cards and rings them for a moment.
+// Zoom buttons and keys step the zoom, and Fit goes back to the reading view.
 import { ReactFlow, useReactFlow, type Viewport } from '@xyflow/react';
 import { forwardRef, useCallback, useEffect, useEffectEvent, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { Level, VNode } from '@idea-to-code/core';
 import type { Layouter } from '../layout/elkClient.js';
-import { fitWidthViewport, fromElk, toElkGraph, type Placed } from '../layout/geometry.js';
+import {
+  fitWidthViewport,
+  fromElk,
+  readingViewport,
+  toElkGraph,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  ZOOM_STEP,
+  zoomBy,
+  type Placed,
+} from '../layout/geometry.js';
 import type { Measure } from '../layout/metrics.js';
 import { EdgeMarkers, edgeTypes, type PlanFlowEdge } from './PlanEdge.js';
 import { nodeTypes, type PlanFlowNode } from './nodes.js';
 import { settle } from './settle.js';
+import { ZoomControls } from './ZoomControls.js';
 
 type Timed = Placed & { ms: number };
 
@@ -56,6 +68,7 @@ const ENTER_MS = 280;
 const ARRIVED_MS = 1400;
 const REVEALED_MS = 3000;
 const REVEAL_PAN_MS = 400;
+const ZOOM_MS = 150;
 /** How long a click on a card that opens waits to see whether it's a double-click. */
 const DOUBLE_CLICK_MS = 250;
 const SETTLE_MS = ENTER_MS + 20;
@@ -78,8 +91,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
   const leaving = useRef(false);
   const shownLevel = useRef<string | null>(null);
   const pendingClick = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  /** The cards the current level was centred on, kept for resizes. */
-  const focusRef = useRef<string[] | undefined>(undefined);
 
   const key = `${version}:${level.id}`;
 
@@ -132,7 +143,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     if (entry.kind === 'reveal') revealed.current = entry;
     if (entry.kind === 'reveal' && sameLevel) {
       // Already here: glide to the changes.
-      focusRef.current = entry.ids;
       userZoomed.current = false;
       void flow.setViewport(targetViewport(p, entry.ids), { duration: reducedMotion() ? 0 : REVEAL_PAN_MS });
       setRinged({ ids: entry.ids, kind: 'revealed' });
@@ -153,7 +163,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     const focus = entry.kind === 'out' ? entry.focus : undefined;
     const ids = entry.kind === 'reveal' ? entry.ids : focus === undefined ? undefined : [focus];
     const target = targetViewport(p, ids);
-    focusRef.current = ids;
     userZoomed.current = false;
     const kind = entry.kind === 'reveal' ? 'revealed' : 'arrived';
     setRinged(ids ? { ids, kind } : null);
@@ -227,8 +236,57 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     };
   }, [selected, panelOpen, placed, key, keepSelectedVisible]);
 
-  // Keep fitting the width as the tab resizes, unless the user zoomed. Only real
-  // width changes count: the observer's first call must not undo the entry viewport.
+  /** The reading view from where the user is now: the width fitted, the middle kept in the middle. */
+  const readingView = useCallback((): Viewport | null => {
+    const el = wrapper.current;
+    if (!el || placed?.key !== key) return null;
+    const { width, height } = placed.placed;
+    return readingViewport({ w: width, h: height }, { w: el.clientWidth, h: el.clientHeight }, flow.getViewport());
+  }, [flow, placed, key]);
+
+  const zoom = useCallback(
+    (direction: 'in' | 'out') => {
+      const el = wrapper.current;
+      if (!el || leaving.current) return;
+      const vp = flow.getViewport();
+      // Around the selected card, so it stays in view; else the middle of the view.
+      const n = selected ? flow.getNode(selected) : undefined;
+      const at =
+        n?.width && n.height
+          ? { x: (n.position.x + n.width / 2) * vp.zoom + vp.x, y: (n.position.y + n.height / 2) * vp.zoom + vp.y }
+          : { x: el.clientWidth / 2, y: el.clientHeight / 2 };
+      userZoomed.current = true;
+      void flow.setViewport(zoomBy(vp, direction === 'in' ? ZOOM_STEP : 1 / ZOOM_STEP, at), { duration: reducedMotion() ? 0 : ZOOM_MS });
+    },
+    [flow, selected],
+  );
+
+  const fit = useCallback(() => {
+    const target = readingView();
+    if (!target || leaving.current) return;
+    userZoomed.current = false;
+    void flow.setViewport(target, { duration: reducedMotion() ? 0 : ZOOM_MS }).then(keepSelectedVisible);
+  }, [flow, readingView, keepSelectedVisible]);
+
+  // + and - zoom, 0 fits, unless the user is typing. With Cmd or Ctrl they stay the editor's own.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const action = { '+': 'in', '=': 'in', '-': 'out', _: 'out', '0': 'fit' }[event.key];
+      if (!action) return;
+      event.preventDefault();
+      if (action === 'fit') fit();
+      else zoom(action as 'in' | 'out');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [zoom, fit]);
+
+  // Keep fitting the width as the tab resizes, keeping your place, unless the user zoomed.
+  // Only real width changes count: the observer's first call must not undo the entry viewport.
   useEffect(() => {
     const el = wrapper.current;
     if (!el) return;
@@ -236,15 +294,14 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     const observer = new ResizeObserver(() => {
       if (el.clientWidth === width) return;
       width = el.clientWidth;
-      if (!userZoomed.current && placed?.key === key) {
-        void flow.setViewport(targetViewport(placed.placed, focusRef.current)).then(keepSelectedVisible);
-      }
+      const target = readingView();
+      if (!userZoomed.current && target) void flow.setViewport(target).then(keepSelectedVisible);
     });
     observer.observe(el);
     return () => {
       observer.disconnect();
     };
-  }, [flow, key, placed, targetViewport, keepSelectedVisible]);
+  }, [flow, readingView, keepSelectedVisible]);
 
   useImperativeHandle(
     ref,
@@ -371,8 +428,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
         selectionKeyCode={null}
         multiSelectionKeyCode={null}
         disableKeyboardA11y={false}
-        minZoom={0.25}
-        maxZoom={2}
+        minZoom={ZOOM_MIN}
+        maxZoom={ZOOM_MAX}
         {...(extent ? { translateExtent: extent } : {})}
         proOptions={{ hideAttribution: true }}
         onMoveStart={(event) => {
@@ -398,7 +455,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
           clearTimeout(pendingClick.current);
           onSelect(null);
         }}
-      />
+      >
+        {current && level.nodes.length > 0 && <ZoomControls onZoom={zoom} onFit={fit} />}
+      </ReactFlow>
       {current && level.nodes.length === 0 && (
         <div className="empty">
           <span className="codicon codicon-type-hierarchy" aria-hidden="true" />

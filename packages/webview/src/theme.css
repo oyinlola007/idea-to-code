@@ -440,6 +440,22 @@ button.crumbs__more[aria-expanded='true'] {
   opacity: 0;
   transition: opacity 200ms ease-in;
 }
+/* Zoom out, zoom in and Fit, bottom right; the side panels end above them. */
+.chart .react-flow__panel.zoom {
+  display: flex;
+  gap: 2px;
+  margin: 16px;
+  padding: 3px;
+  border: 1px solid var(--itc-border);
+  border-radius: var(--itc-radius);
+  background: var(--vscode-editorWidget-background, var(--itc-card));
+  box-shadow: var(--itc-shadow-raised);
+}
+.chart .react-flow__panel.zoom .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
 .edge-markers {
   position: absolute;
   width: 0;
@@ -504,7 +520,9 @@ button.crumbs__more[aria-expanded='true'] {
   border-color: var(--itc-border-strong);
   box-shadow: var(--itc-shadow-raised);
 }
-.card.is-selected {
+/* Selection outranks hover: hovering the selected card keeps its ring. */
+.card.is-selected,
+.react-flow__node:hover .card.is-selected {
   border-color: var(--itc-accent);
   box-shadow:
     0 0 0 1px var(--itc-accent),
@@ -582,7 +600,8 @@ button.crumbs__more[aria-expanded='true'] {
     0 8px 0 -3px var(--itc-border-strong),
     var(--itc-shadow-raised);
 }
-.card--expandable.is-selected {
+.card--expandable.is-selected,
+.react-flow__node:hover .card--expandable.is-selected {
   box-shadow:
     0 0 0 1px var(--itc-accent),
     0 5px 0 -1px var(--itc-card),
@@ -895,7 +914,8 @@ body.vscode-high-contrast-light .ring__track {
   right: 12px;
   width: 320px;
   max-width: calc(100% - 24px);
-  max-height: calc(100% - 24px);
+  /* Ends above the zoom buttons in the corner (16 + 36 + 12), and scrolls when longer. */
+  max-height: calc(100% - 12px - 64px);
   overflow: auto;
   padding: 12px 16px 16px;
   border: 1px solid var(--itc-border);

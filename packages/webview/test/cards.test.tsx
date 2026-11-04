@@ -9,6 +9,7 @@ import { crumbsToHide } from '../src/ui/crumbLayout.js';
 import { kindIcon, kindLabel } from '../src/chart/icons.js';
 import { approxMeasure, nodeBox } from '../src/layout/metrics.js';
 import { progressText } from '../src/ui/ProgressRing.js';
+import { ZoomButtons } from '../src/chart/ZoomControls.js';
 
 const source = { file: 'plan/features/bookings.yaml', line: 3 };
 
@@ -207,5 +208,26 @@ describe('progressText', () => {
     expect(progressText({ done: 0, total: 0 })).toBe('No steps yet');
     expect(progressText({ done: 2, total: 5 })).toBe('2 of 5 done');
     expect(progressText({ done: 5, total: 5 })).toBe('All 5 done');
+  });
+});
+
+describe('zoom buttons', () => {
+  const buttons = (zoom: number) =>
+    renderToStaticMarkup(
+      <ReactFlowProvider>
+        <ZoomButtons zoom={zoom} onZoom={() => undefined} onFit={() => undefined} />
+      </ReactFlowProvider>,
+    );
+
+  it('are labelled for screen readers and tooltips', () => {
+    const html = buttons(1);
+    for (const label of ['Zoom out', 'Zoom in', 'Fit']) expect(html).toContain(`title="${label}" aria-label="${label}"`);
+    expect(html).not.toContain('disabled');
+  });
+
+  it('turn off zooming further at each limit, never Fit', () => {
+    expect(buttons(0.25).match(/disabled/g)).toHaveLength(1);
+    expect(buttons(0.25)).toMatch(/aria-label="Zoom out" disabled/);
+    expect(buttons(2)).toMatch(/aria-label="Zoom in" disabled/);
   });
 });

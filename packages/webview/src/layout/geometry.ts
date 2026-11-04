@@ -1,6 +1,7 @@
 // Layout geometry, free of the DOM: the ELK graph for a level, positioned
 // nodes and edge polylines back out, rounded edge paths, where labels sit,
-// and the viewport rule (fit the width, never zoom in, start at the top).
+// and the viewport rules (fit the width, never zoom in, start at the top; the
+// zoom buttons' steps and the reading view they come back to).
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api.js';
 import type { Level } from '@idea-to-code/core';
 import { edgeLabelBox, nodeBox, type EdgeLabelBox, type Measure, type NodeBox } from './metrics.js';
@@ -327,7 +328,7 @@ export function fitWidthViewport(
   padding = 32,
   center?: { container: { h: number }; graphH: number; focus: { y: number; h: number } },
 ): Viewport {
-  const zoom = Math.min(1, Math.max(0.25, (containerW - padding * 2) / Math.max(graphW, 1)));
+  const zoom = Math.min(1, Math.max(ZOOM_MIN, (containerW - padding * 2) / Math.max(graphW, 1)));
   const vp = { x: (containerW - graphW * zoom) / 2, y: padding, zoom };
   if (center) {
     const { container, graphH, focus } = center;
@@ -337,4 +338,31 @@ export function fitWidthViewport(
     vp.y = Math.max(lowest, Math.min(padding, centred));
   }
   return vp;
+}
+
+/** How far the chart zooms out and in. */
+export const ZOOM_MIN = 0.25;
+export const ZOOM_MAX = 2;
+/** One press of zoom in or out. */
+export const ZOOM_STEP = 1.25;
+
+/** Close enough to a limit to count as there: zoom steps don't land on it exactly. */
+export function atZoomLimit(zoom: number, limit: number): boolean {
+  return Math.abs(zoom - limit) < 0.001;
+}
+
+/** Zooms by `factor`, within the limits, keeping the point `at` (in view coordinates) where it is. */
+export function zoomBy(vp: Viewport, factor: number, at: Point): Viewport {
+  const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, vp.zoom * factor));
+  const s = zoom / vp.zoom;
+  return { x: at.x - (at.x - vp.x) * s, y: at.y - (at.y - vp.y) * s, zoom };
+}
+
+/**
+ * The normal reading view, from wherever the user is: the width fitted as a level
+ * opens, keeping what was in the middle of the view in the middle.
+ */
+export function readingViewport(graph: { w: number; h: number }, view: { w: number; h: number }, vp: Viewport, padding = 32): Viewport {
+  const middle = (view.h / 2 - vp.y) / vp.zoom;
+  return fitWidthViewport(graph.w, view.w, padding, { container: { h: view.h }, graphH: graph.h, focus: { y: middle, h: 0 } });
 }

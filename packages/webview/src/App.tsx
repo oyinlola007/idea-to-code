@@ -442,7 +442,12 @@ function Viewer({
   const onSelect = useCallback(
     (id: string | null) => {
       // A card's details share their spot with the other panels; clicking a card asks for the details.
-      if (id !== null) onHistoryPanel(null);
+      // The background closes the details first and keeps the card highlighted, as their close button does.
+      if (id === null) {
+        dispatch({ type: 'clickAway' });
+        return;
+      }
+      onHistoryPanel(null);
       dispatch({ type: 'select', id });
     },
     [dispatch, onHistoryPanel],
