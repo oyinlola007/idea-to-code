@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { readPlanTexts } from '../scripts/readPlan.js';
 import { loadFromTexts } from '../src/load.js';
 import { OVERVIEW } from '../src/progress.js';
+import { missingCodeLinkIssues } from '../src/codeLinks.js';
 import { buildViewModel, ViewModel, type VNode } from '../src/viewModel.js';
 import { fixturePath } from './helpers.js';
 
@@ -15,6 +16,20 @@ function node(level: string, id: string): VNode {
   if (!found) throw new Error(`no ${id} in ${level}`);
   return found;
 }
+
+describe('code links on the chart', () => {
+  it('lists each card’s code, marking what the host found missing, with its warning on the card', async () => {
+    const project = loadFromTexts(await readPlanTexts(fixturePath('toolshed')));
+    const missing = new Set(['src/payments/deposit.ts']);
+    const view = buildViewModel(project, { missingCode: missing, extraIssues: missingCodeLinkIssues(project, missing) });
+    const at = (level: string, id: string) => view.levels[level]?.nodes.find((n) => n.id === id);
+    expect(at('bookings', 'pick-dates')?.code).toEqual([{ path: 'src/bookings/' }]);
+    expect(at(OVERVIEW, 'app-db')?.code).toEqual([{ path: 'db/schema.sql' }]);
+    expect(at('take-deposit-flow', 'record-deposit')?.code).toEqual([{ path: 'src/payments/deposit.ts', missing: true }]);
+    expect(at('take-deposit-flow', 'record-deposit')?.problems?.[0]?.message).toContain("doesn't exist");
+    expect(at('bookings', 'tool-available')?.code).toBeUndefined();
+  });
+});
 
 describe('buildViewModel on Toolshed', () => {
   it('has a level for the overview and for every flow', () => {

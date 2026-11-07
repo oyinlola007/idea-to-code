@@ -1,5 +1,6 @@
 // What a card can't show: the full description (where agents record their
-// decisions), what flows in and out, a way to the YAML, and the simple edits.
+// decisions), the code that builds it, what flows in and out, a way to the YAML,
+// and the simple edits.
 import type { Level, VEdge, VNode } from '@idea-to-code/core';
 import { useState } from 'react';
 import { kindIcon, kindLabel } from '../chart/icons.js';
@@ -30,6 +31,80 @@ interface Props {
   onClose: () => void;
   onOpen: (node: VNode) => void;
   onSource: (node: VNode) => void;
+  /** Opens a linked file beside the chart, or shows a linked folder. */
+  onOpenCode: (path: string) => void;
+  /** Asks the editor for files to link. */
+  onLinkCode: (node: VNode) => void;
+}
+
+/** The files and folders that build a step or component: open one, unlink it, link more. */
+function CodeLinks({
+  node,
+  canEdit,
+  onEdit,
+  onOpenCode,
+  onLinkCode,
+}: Pick<Props, 'node' | 'canEdit' | 'onEdit' | 'onOpenCode' | 'onLinkCode'>) {
+  const links = node.code ?? [];
+  // A card with a child flow takes no links, but any old ones are listed so they can be removed.
+  const canLink = canEdit && node.opens === undefined;
+  if (node.kind !== 'step' && node.kind !== 'component') return null;
+  if (links.length === 0 && !canLink) return null;
+  return (
+    <section className="details__flows details__code" aria-label="Code">
+      <h3>Code</h3>
+      {links.length > 0 && (
+        <ul>
+          {links.map((link) => (
+            <li key={link.path}>
+              <button
+                type="button"
+                className={`code-link${link.missing === true ? ' code-link--missing' : ''}`}
+                title={link.missing === true ? `${link.path} doesn't exist` : `Open ${link.path}`}
+                onClick={() => {
+                  onOpenCode(link.path);
+                }}
+              >
+                <span
+                  className={`codicon codicon-${link.missing === true ? 'warning' : link.path.endsWith('/') ? 'folder' : 'file-code'}`}
+                  aria-hidden="true"
+                />
+                <span>{link.path}</span>
+              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  className="icon-button flow-remove"
+                  title="Unlink"
+                  aria-label={`Unlink ${link.path}`}
+                  onClick={() => {
+                    void onEdit({
+                      name: 'link_code',
+                      input: { id: node.id, paths: links.map((l) => l.path).filter((p) => p !== link.path) },
+                    });
+                  }}
+                >
+                  <span className="codicon codicon-close" aria-hidden="true" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canLink && (
+        <button
+          type="button"
+          className="button button--secondary details__link-code"
+          onClick={() => {
+            onLinkCode(node);
+          }}
+        >
+          <span className="codicon codicon-add" aria-hidden="true" />
+          Link a file…
+        </button>
+      )}
+    </section>
+  );
 }
 
 function EdgeRow({ peer, edge, onRemove }: { peer: string; edge: VEdge; onRemove?: (() => void) | undefined }) {
@@ -53,7 +128,7 @@ function EdgeRow({ peer, edge, onRemove }: { peer: string; edge: VEdge; onRemove
   );
 }
 
-export function DetailsPanel({ node, level, canEdit, onEdit, onFirstStep, onClose, onOpen, onSource }: Props) {
+export function DetailsPanel({ node, level, canEdit, onEdit, onFirstStep, onClose, onOpen, onSource, onOpenCode, onLinkCode }: Props) {
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [addingStep, setAddingStep] = useState(false);
@@ -168,6 +243,8 @@ export function DetailsPanel({ node, level, canEdit, onEdit, onFirstStep, onClos
       ) : (
         <p className="details__description details__description--empty">No description yet.</p>
       )}
+
+      <CodeLinks node={node} canEdit={canEdit} onEdit={onEdit} onOpenCode={onOpenCode} onLinkCode={onLinkCode} />
 
       {(incoming.length > 0 || outgoing.length > 0 || targets.length > 0) && (
         <section className="details__flows">

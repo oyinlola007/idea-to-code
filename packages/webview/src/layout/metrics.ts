@@ -57,6 +57,7 @@ function hasMeta(n: VNode): boolean {
     n.planned === true ||
     n.status !== undefined ||
     n.tech !== undefined ||
+    (n.code?.length ?? 0) > 0 ||
     n.kind === 'component' ||
     n.kind === 'reference'
   );
@@ -70,9 +71,16 @@ export function nodeBox(n: VNode, measure: Measure): NodeBox {
   const width = M.width[n.kind];
   const inner = width - M.padX * 2;
   const isFeature = n.kind === 'feature';
-  // Decision and component cards have a leading glyph on the title line.
+  // Decision and component cards have a leading glyph on the title line; a problem puts a badge at its end.
   const glyph = n.kind === 'decision' ? 22 : 0;
-  const title = wrap(n.label, isFeature ? 'title' : 'label', inner - glyph, isFeature ? M.maxLines.title : M.maxLines.label, measure);
+  const badge = n.problems && n.problems.length > 0 ? 20 : 0;
+  const title = wrap(
+    n.label,
+    isFeature ? 'title' : 'label',
+    inner - glyph - badge,
+    isFeature ? M.maxLines.title : M.maxLines.label,
+    measure,
+  );
   const body = isFeature && n.description ? wrap(n.description, 'body', inner, M.maxLines.body, measure) : [];
   const meta = hasMeta(n);
   const kindRow = n.kind === 'component' ? M.lineH.meta + 4 : 0;

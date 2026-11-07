@@ -23,6 +23,7 @@ function nodeSummary(node: PlanNode): string {
   if (node.type === 'component') parts.push(`kind=${node.kind}${node.tech ? `, tech=${node.tech}` : ''}`);
   if (node.type === 'reference') parts.push(`ref=${node.ref}`);
   if ((node.type === 'step' || node.type === 'component') && node.status) parts.push(`status=${node.status}`);
+  if ((node.type === 'step' || node.type === 'component') && node.implements?.length) parts.push(`code=${node.implements.join(' ')}`);
   return parts.join(', ');
 }
 
@@ -70,7 +71,8 @@ export function getOutline(project: Project): string {
   if (index.components.size > 0) {
     out.push('', 'Shared components (include one in a flow with a reference node):');
     for (const c of index.components.values()) {
-      out.push(`- ${c.id}: ${c.label} (${c.kind}${c.tech ? `, ${c.tech}` : ''}${c.status ? `, status=${c.status}` : ''})`);
+      const code = c.implements?.length ? `, code=${c.implements.join(' ')}` : '';
+      out.push(`- ${c.id}: ${c.label} (${c.kind}${c.tech ? `, ${c.tech}` : ''}${c.status ? `, status=${c.status}` : ''}${code})`);
     }
   }
   const connections = index.map?.connections ?? [];

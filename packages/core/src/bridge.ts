@@ -1,7 +1,7 @@
 // The messages between the webview and the extension host. Both sides parse every
 // message with these schemas, so neither trusts what crosses the boundary.
 import { z } from 'zod';
-import { type Project, loadFromTexts } from './load.js';
+import { type Issue, type Project, loadFromTexts } from './load.js';
 import { OVERVIEW, rollup } from './progress.js';
 import { Reveal } from './reveal.js';
 import { indexProject, validateProject } from './validate.js';
@@ -159,6 +159,7 @@ export const UiOperation = z.enum([
   'add_node',
   'update_node',
   'set_status',
+  'link_code',
   'remove_node',
   'add_edge',
   'remove_edge',
@@ -280,6 +281,10 @@ export const WebviewMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('settings-shown'), shown: z.boolean() }),
   z.strictObject({ type: z.literal('init-plan') }),
   z.strictObject({ type: z.literal('open-source'), file: z.string().max(500), line: z.number().int().min(1) }),
+  /** Open a card's linked file beside the chart, or show a linked folder. */
+  z.strictObject({ type: z.literal('open-code'), path: z.string().max(300) }),
+  /** Pick files or folders in the editor and link them to a card. */
+  z.strictObject({ type: z.literal('link-code'), nodeId: z.string().max(200) }),
   z.strictObject({ type: z.literal('chat-get') }),
   z.strictObject({ type: z.literal('chat-send'), text: z.string().min(1).max(20_000) }),
   z.strictObject({ type: z.literal('chat-cancel') }),
@@ -290,7 +295,7 @@ export const WebviewMessage = z.discriminatedUnion('type', [
 ]);
 export type WebviewMessage = z.infer<typeof WebviewMessage>;
 
-function summarize(project: Project): PlanSummary {
+function summarize(project: Project, extraIssues: readonly Issue[] = []): PlanSummary {
   const progress = rollup(project);
   const listed = project.map?.data?.features ?? [];
   const features = [...indexProject(project).features.entries()].map(([id, feature]) => {
@@ -305,11 +310,13 @@ function summarize(project: Project): PlanSummary {
     done: overall.done,
     total: overall.total,
     // A listed feature without flows is a normal stage of planning, and its row already says so.
-    problems: validateProject(project).filter((issue) => issue.code !== 'feature-without-flows'),
+    problems: [...validateProject(project), ...extraIssues]
+      .filter((issue) => issue.code !== 'feature-without-flows')
+      .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.col - b.col),
   };
 }
 
-/** What the app shows about a plan, from its file contents. */
-export function summarizePlan(texts: Readonly<Record<string, string>>): PlanSummary {
-  return summarize(loadFromTexts(texts));
+/** What the app shows about a plan, from its file contents, plus problems only the host can find (missing code). */
+export function summarizePlan(texts: Readonly<Record<string, string>>, extraIssues: readonly Issue[] = []): PlanSummary {
+  return summarize(loadFromTexts(texts), extraIssues);
 }

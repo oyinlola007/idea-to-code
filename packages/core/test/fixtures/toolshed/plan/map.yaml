@@ -27,6 +27,8 @@ components:
     kind: database
     tech: PostgreSQL
     status: done
+    implements:
+      - db/schema.sql
   - id: payments-api
     label: Payments API
     kind: external-api

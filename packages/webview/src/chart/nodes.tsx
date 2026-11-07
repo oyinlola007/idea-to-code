@@ -66,6 +66,18 @@ function Lines({ lines, className }: { lines: string[]; className: string }) {
   );
 }
 
+/** Linked to code: a quiet mark, in the warning colour when a link is broken. The panel holds the links. */
+function CodeBadge({ code }: { code: NonNullable<VNode['code']> }) {
+  const missing = code.filter((c) => c.missing === true).length;
+  const label =
+    missing > 0 ? `${String(missing)} of ${String(code.length)} code links broken` : `Linked to ${code.map((c) => c.path).join(', ')}`;
+  return (
+    <span className={`meta__code${missing > 0 ? ' meta__code--missing' : ''}`} title={label} aria-label={label} role="img">
+      <Codicon name="code" />
+    </span>
+  );
+}
+
 function Meta({ node, onOpen }: { node: VNode; onOpen: (n: VNode) => void }) {
   let content: ReactNode = null;
   if (node.opens && node.progress) {
@@ -95,11 +107,14 @@ function Meta({ node, onOpen }: { node: VNode; onOpen: (n: VNode) => void }) {
     );
   }
   const tech = node.kind !== 'reference' && node.tech ? <span className="chip chip--mono">{node.tech}</span> : null;
+  // A card that opens a flow takes no code links (the steps inside do), so it never shows both marks.
+  const code = node.code && node.code.length > 0 && node.opens === undefined ? <CodeBadge code={node.code} /> : null;
   const target = node.opens ?? node.jumpsTo;
   return (
     <div className="card__meta">
       <div className="meta__main">{content}</div>
       {tech}
+      {code}
       {target && <OpenButton node={node} onOpen={onOpen} label={node.opens ? `Open “${node.label}”` : `Go to “${node.refLabel}”`} />}
     </div>
   );

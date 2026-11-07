@@ -3,7 +3,9 @@
 // refresh(), so the sidebar, tabs and Problems panel can't disagree.
 import {
   buildViewModel,
+  codeLinkPaths,
   loadFromTexts,
+  missingCodeLinkIssues,
   summarizePlan,
   type AppState,
   type EditResult,
@@ -58,6 +60,8 @@ export class ProjectHost implements vscode.Disposable {
   /** The agent's changes so far in a turn, shown on the chart before they're written. */
   private preview: Record<string, string> | null = null;
   private agentBusy = false;
+  /** The plan's code links on disk (normalized), to know when a file event matters. */
+  private linked = new Set<string>();
 
   constructor(
     private readonly log: vscode.LogOutputChannel,
@@ -69,11 +73,19 @@ export class ProjectHost implements vscode.Disposable {
     const later = () => {
       this.scheduleRefresh();
     };
+    // A linked file appearing or going away changes the plan's warnings, not the plan: check again quietly.
+    const code = vscode.workspace.createFileSystemWatcher('**/*', false, true, false);
+    const codeEvent = (uri: vscode.Uri) => {
+      if (this.isLinked(uri)) this.scheduleRefresh(true);
+    };
     this.subscriptions.push(
       watcher,
       watcher.onDidChange(later),
       watcher.onDidCreate(later),
       watcher.onDidDelete(later),
+      code,
+      code.onDidCreate(codeEvent),
+      code.onDidDelete(codeEvent),
       vscode.workspace.onDidChangeWorkspaceFolders(later),
       // A plan file the user saved from the editor they're typing in is their own change.
       vscode.workspace.onDidSaveTextDocument((document) => {
@@ -90,6 +102,33 @@ export class ProjectHost implements vscode.Disposable {
 
   get activeFolder(): vscode.WorkspaceFolder | undefined {
     return this.folder;
+  }
+
+  /** Whether a path, as the plan writes it, is one of its code links. Opening one from the page is only allowed then. */
+  isLinkedPath(path: string): boolean {
+    return this.linked.has(path.endsWith('/') ? path.slice(0, -1) : path);
+  }
+
+  /** A file event inside a linked folder or at a linked file. */
+  private isLinked(uri: vscode.Uri): boolean {
+    const root = this.folder?.uri;
+    if (root?.scheme !== uri.scheme || !uri.path.startsWith(`${root.path}/`)) return false;
+    const path = uri.path.slice(root.path.length + 1);
+    for (const link of this.linked) if (path === link || path.startsWith(`${link}/`) || link.startsWith(`${path}/`)) return true;
+    return false;
+  }
+
+  /** The links nothing exists at, checked in the editor's file system. */
+  private async missingCode(folder: vscode.WorkspaceFolder, paths: readonly string[]): Promise<Set<string>> {
+    const found = await Promise.all(
+      paths.map((path) =>
+        vscode.workspace.fs.stat(vscode.Uri.joinPath(folder.uri, ...path.split('/'))).then(
+          () => true,
+          () => false,
+        ),
+      ),
+    );
+    return new Set(paths.filter((_, i) => !found[i]));
   }
 
   /** The file's path in the active plan, if it belongs to it. */
@@ -185,6 +224,7 @@ export class ProjectHost implements vscode.Disposable {
     if (!folder) {
       this.outside.reset();
       this.diagnostics.clear();
+      this.linked = new Set();
       this.publish({ kind: 'no-plan', trusted });
       return;
     }
@@ -193,16 +233,23 @@ export class ProjectHost implements vscode.Disposable {
 
     const disk = await readTexts(files);
     this.outside.seen(disk, own);
-    // Problems are about the files; the chart shows the agent's preview while it works.
-    this.showDiagnostics(folder, summarizePlan(disk).problems);
+    const diskProject = loadFromTexts(disk);
+    const diskLinks = codeLinkPaths(diskProject);
+    this.linked = new Set(diskLinks);
+    // Problems are about the files; the chart shows the agent's preview while it works, its links checked too.
+    const diskMissing = await this.missingCode(folder, diskLinks);
+    this.showDiagnostics(folder, summarizePlan(disk, missingCodeLinkIssues(diskProject, diskMissing)).problems);
     const texts = this.preview ?? disk;
+    const project = this.preview ? loadFromTexts(texts) : diskProject;
+    const missingCode = this.preview ? await this.missingCode(folder, codeLinkPaths(project)) : diskMissing;
+    const extraIssues = missingCodeLinkIssues(project, missingCode);
     const history = await this.readHistory();
     this.publish({
       kind: 'plan',
       trusted,
       folder: folder.name,
-      plan: summarizePlan(texts),
-      model: buildViewModel(loadFromTexts(texts)),
+      plan: summarizePlan(texts, extraIssues),
+      model: buildViewModel(project, { missingCode, extraIssues }),
       history,
       ...(this.agentBusy ? { agentBusy: true } : {}),
     });

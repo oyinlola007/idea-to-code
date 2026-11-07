@@ -36,8 +36,10 @@ describe('generateGuide', () => {
   });
 
   it('takes node fields from the schema', () => {
-    expect(guide).toContain('| `step` | something the app or user does | `status`, `expands` |');
-    expect(guide).toMatch(/\| `component` \|.*\| `kind` \(required, any word\), `tech`, `status`, `expands` \|/);
+    expect(guide).toContain('| `step` | something the app or user does | `status`, `expands`, `implements` (a list of files or folders) |');
+    expect(guide).toMatch(
+      /\| `component` \|.*\| `kind` \(required, any word\), `tech`, `status`, `expands`, `implements` \(a list of files or folders\) \|/,
+    );
     expect(guide).toMatch(/\| `reference` \|.*\| `ref` \(required\) \|/);
     expect(guide).toMatch(/\| `decision` \|.*\| none \|/);
   });

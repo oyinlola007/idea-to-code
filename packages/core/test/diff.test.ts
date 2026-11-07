@@ -41,6 +41,27 @@ describe('diffProjects', () => {
     ]);
   });
 
+  it('reports code links changing on a step and on a shared component', () => {
+    const changes = diffAfter(
+      ['link_code', { id: 'confirm-booking', paths: ['src/confirm.ts'] }],
+      ['link_code', { id: 'app-db', paths: [] }],
+    ).changes;
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'node-changed',
+          id: 'confirm-booking',
+          fields: [{ field: 'implements', from: null, to: 'src/confirm.ts' }],
+        }),
+        expect.objectContaining({
+          kind: 'component-changed',
+          id: 'app-db',
+          fields: [{ field: 'implements', from: 'db/schema.sql', to: null }],
+        }),
+      ]),
+    );
+  });
+
   it('reports every changed field of a node', () => {
     const { changes } = diffAfter(['update_node', { id: 'handover-api', label: 'API', tech: 'Go', description: 'Scans.' }]);
     expect(changes[0]).toMatchObject({

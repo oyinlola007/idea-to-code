@@ -4,7 +4,7 @@
 import type { Reveal } from '@idea-to-code/core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import type { ExtensionApi } from '../../src/extension.js';
@@ -184,6 +184,34 @@ export async function journeyScenario(api: ExtensionApi, root: string): Promise<
       JSON.stringify(planState(api).plan.problems),
     );
     noWebviewErrors(api);
+  });
+
+  await step('7. an outside agent links the code it wrote, and validate finds nothing missing', async () => {
+    const extension = vscode.extensions.getExtension('idea-to-code.idea-to-code');
+    await mkdir(join(root, 'src', 'payments'), { recursive: true });
+    await writeFile(join(root, 'src', 'payments', 'capture.ts'), 'export function capture(): void {}\n');
+    const client = new Client({ name: 'claude-code', version: '1.0.0' });
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [join(extension?.extensionPath ?? '', 'dist', 'mcp.mjs'), '--root', root],
+        env: { ...(process.env as Record<string, string>), ELECTRON_RUN_AS_NODE: '1' },
+        stderr: 'ignore',
+      }),
+    );
+    try {
+      const linked = await client.callTool({ name: 'link_code', arguments: { id: 'capture', paths: ['src/payments/capture.ts'] } });
+      check(linked.isError !== true, JSON.stringify(linked.content));
+      const checked = JSON.stringify((await client.callTool({ name: 'validate', arguments: {} })).content);
+      check(!checked.includes('code-link-missing'), checked);
+    } finally {
+      await client.close();
+    }
+    await until('the link on the chart', () =>
+      (planState(api).model.levels['charge-the-card-flow']?.nodes.find((n) => n.id === 'capture')?.code ?? []).some(
+        (c) => c.missing !== true,
+      ),
+    );
   });
 
   api.closeApp();

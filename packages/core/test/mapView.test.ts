@@ -17,7 +17,7 @@ describe('the outline', () => {
     expect(outline).toContain('  - flow place-booking-flow: Place booking (under node place-booking; 2/5 done)');
     expect(outline).toContain('    - flow take-deposit-flow: Take deposit (under node take-deposit; 1/3 done)');
     expect(outline).toContain('- reminders: Reminders (no flows yet)');
-    expect(outline).toContain('- app-db: App database (database, PostgreSQL, status=done)');
+    expect(outline).toContain('- app-db: App database (database, PostgreSQL, status=done, code=db/schema.sql)');
     expect(outline).toMatch(/Connections between features:\n- /);
   });
 
@@ -41,7 +41,7 @@ describe('a flow', () => {
     const flow = getFlow(project, 'bookings');
     expect(flow).toContain('Flow bookings: Bookings (4/8 done)');
     expect(flow).toContain('Path: Overview › Bookings');
-    expect(flow).toMatch(/- pick-dates: "Pick dates" \(step, status=done\)/);
+    expect(flow).toMatch(/- pick-dates: "Pick dates" \(step, status=done, code=src\/bookings\/\)/);
     expect(flow).toMatch(/- place-booking: "Place booking" \(step, expands=place-booking-flow \(2\/5 done\)\)/);
     expect(flow).toMatch(/- tool-available -> place-booking \(yes\)/);
   });

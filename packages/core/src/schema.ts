@@ -7,6 +7,13 @@ export const Slug = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'ids are lowerc
 
 export const Status = z.enum(['todo', 'in_progress', 'done']);
 
+/**
+ * The files or folders that build a step or component, relative to the project.
+ * Kept loose here: a bad path is a validator error at its line, so it never makes
+ * the whole file unreadable.
+ */
+export const CodeLinks = z.array(z.string().min(1)).describe('Files or folders that implement this, relative to the project');
+
 const base = {
   id: Slug,
   label: z.string().min(1),
@@ -22,6 +29,7 @@ export const StepNode = z.strictObject({
   type: z.literal('step'),
   status: Status.optional(),
   expands: Slug.optional(),
+  implements: CodeLinks.optional(),
 });
 export const ComponentNode = z.strictObject({
   ...base,
@@ -30,6 +38,7 @@ export const ComponentNode = z.strictObject({
   tech: z.string().optional(),
   status: Status.optional(),
   expands: Slug.optional(),
+  implements: CodeLinks.optional(),
 });
 export const ReferenceNode = z.strictObject({
   ...base,
@@ -71,6 +80,7 @@ export const TopComponent = z.strictObject({
   tech: z.string().optional(),
   description: z.string().optional(),
   status: Status.optional(),
+  implements: CodeLinks.optional(),
 });
 
 export const Connection = z.strictObject({

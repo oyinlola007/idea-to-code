@@ -22,7 +22,7 @@ const NODE_DOCS: NodeDoc[] = [
   { type: 'reference', use: 'something defined elsewhere: another feature, a flow, or a shared component', shape: ReferenceNode.shape },
 ];
 
-const EXTRA_NOTES: Record<string, string> = { kind: 'any word' };
+const EXTRA_NOTES: Record<string, string> = { kind: 'any word', implements: 'a list of files or folders' };
 
 function extraFields(doc: NodeDoc): string {
   const extras = Object.entries(doc.shape)
@@ -98,6 +98,8 @@ flows:
         label: Pick dates
         description: Only whole days in v1, because owners hand tools over in person.
         status: done
+        implements:            # the code that builds it, relative to the project
+          - src/bookings/pick-dates.ts
       - id: tool-available
         type: decision
         label: Tool available?
@@ -169,11 +171,12 @@ Every node has \`id\`, \`type\` and \`label\` (\`start\` and \`end\` may leave o
 8. **Features:** every file in \`features/\` must be listed under \`features\` in \`map.yaml\`. A listed feature without a file is fine: it just has no flows yet.
 9. **A feature's top-level flow** is referred to by the feature's id (e.g. \`ref: bookings\`), not by \`main\`.
 10. **Only these keys exist.** Unknown keys (typos like \`stauts\`) make the file invalid.
-11. **Shared components:** check \`components\` in \`map.yaml\` first. When a flow uses one, add a \`reference\` node for it, connected by edges, rather than only naming it in a step's label ("Send via SMS service"). Otherwise the chart can't show what depends on it.
+11. **Code links** (\`implements\`) list the files or folders that build a step or component, as paths relative to the project, with \`/\` between folders. No absolute paths and no \`..\`. Shared components in \`map.yaml\` can have them too. A node with a child flow (\`expands\`) has none: link the steps inside it.
+12. **Shared components:** check \`components\` in \`map.yaml\` first. When a flow uses one, add a \`reference\` node for it, connected by edges, rather than only naming it in a step's label ("Send via SMS service"). Otherwise the chart can't show what depends on it.
 
 ## Common tasks
 
-- **Mark work done:** set \`status: done\` on the step or component. If it has a child flow, mark the steps inside that flow.
+- **Mark work done:** add the files that build the step or component to \`implements\`, then set \`status: done\`. If it has a child flow, mark the steps inside that flow.
 - **Add detail under a step:** pick a flow key (e.g. \`<node-id>-flow\`), add \`expands: <flow-key>\` to the node, and add the flow under \`flows:\` with \`label\`, \`nodes\` and \`edges\`. Remove any \`status\` from the parent node.
 - **Add a feature:** add it under \`features\` in \`map.yaml\`, create \`features/<id>.yaml\` with \`feature: <id>\` and a \`main\` flow, and add \`connections\` to the features it feeds.
 - **Use a shared component in a flow:** add a \`reference\` node with \`ref: <component-id>\`.

@@ -1,5 +1,5 @@
 // What each kind of card shows, rendered by the real components.
-import type { VNode } from '@idea-to-code/core';
+import type { Level, VNode } from '@idea-to-code/core';
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ import { kindIcon, kindLabel } from '../src/chart/icons.js';
 import { approxMeasure, nodeBox } from '../src/layout/metrics.js';
 import { progressText } from '../src/ui/ProgressRing.js';
 import { ZoomButtons } from '../src/chart/ZoomControls.js';
+import { DetailsPanel } from '../src/ui/DetailsPanel.js';
 
 const source = { file: 'plan/features/bookings.yaml', line: 3 };
 
@@ -229,5 +230,99 @@ describe('zoom buttons', () => {
     expect(buttons(0.25).match(/disabled/g)).toHaveLength(1);
     expect(buttons(0.25)).toMatch(/aria-label="Zoom out" disabled/);
     expect(buttons(2)).toMatch(/aria-label="Zoom in" disabled/);
+  });
+});
+
+describe('code links', () => {
+  const step = (code?: VNode['code']): VNode => ({
+    id: 's',
+    kind: 'step',
+    label: 'Pick dates',
+    status: 'done',
+    source,
+    ...(code ? { code } : {}),
+  });
+
+  it('marks a linked card quietly, and in the warning colour when a link is broken', () => {
+    expect(card(step())).not.toContain('meta__code');
+    const linked = card(step([{ path: 'src/dates.ts' }]));
+    expect(linked).toContain('class="meta__code"');
+    expect(linked).toContain('Linked to src/dates.ts');
+    const broken = card(step([{ path: 'src/dates.ts' }, { path: 'src/gone.ts', missing: true }]));
+    expect(broken).toContain('meta__code meta__code--missing');
+    expect(broken).toContain('1 of 2 code links broken');
+  });
+
+  it('gives a linked card without a status a row for its badge', () => {
+    const plain: VNode = { id: 's', kind: 'step', label: 'Pick dates', source };
+    expect(nodeBox(plain, approxMeasure).hasMeta).toBe(false);
+    expect(nodeBox({ ...plain, code: [{ path: 'src/a.ts' }] }, approxMeasure).hasMeta).toBe(true);
+  });
+
+  const level: Level = {
+    id: 'bookings',
+    title: 'Bookings',
+    parent: 'overview',
+    crumbs: [],
+    depth: 1,
+    nodes: [],
+    edges: [],
+    progress: { done: 0, total: 0 },
+    source,
+  };
+  const panel = (node: VNode, canEdit: boolean) =>
+    renderToStaticMarkup(
+      <DetailsPanel
+        node={node}
+        level={{ ...level, nodes: [node] }}
+        canEdit={canEdit}
+        onEdit={() => Promise.resolve(true)}
+        onFirstStep={() => undefined}
+        onClose={() => undefined}
+        onOpen={() => undefined}
+        onSource={() => undefined}
+        onOpenCode={() => undefined}
+        onLinkCode={() => undefined}
+      />,
+    );
+
+  it('lists the links in the details, each one opening, with unlink and link only when editing', () => {
+    const node = step([{ path: 'src/dates.ts' }, { path: 'src/gone.ts', missing: true }]);
+    const editing = panel(node, true);
+    expect(editing).toContain('<h3>Code</h3>');
+    expect(editing).toContain('title="Open src/dates.ts"');
+    expect(editing).toContain('code-link code-link--missing');
+    expect(editing).toContain('aria-label="Unlink src/gone.ts"');
+    expect(editing).toContain('Link a file…');
+    const viewing = panel(node, false);
+    expect(viewing).not.toContain('Unlink');
+    expect(viewing).not.toContain('Link a file');
+  });
+
+  it('never marks a card that opens a flow, and offers no linking there, while listing old links to remove', () => {
+    const parent: VNode = { ...step([{ path: 'src/payments' }]), opens: 'pay-flow', progress: { done: 1, total: 3 } };
+    expect(card(parent)).not.toContain('meta__code');
+    const html = panel(parent, true);
+    expect(html).not.toContain('Link a file');
+    expect(html).toContain('aria-label="Unlink src/payments"');
+    const unlinked: VNode = { id: 's', kind: 'step', label: 'Pick dates', source, opens: 'pay-flow', progress: { done: 1, total: 3 } };
+    expect(panel(unlinked, true)).not.toContain('<h3>Code</h3>');
+  });
+
+  it('shows no Code section where it can’t apply, or when there is nothing to show', () => {
+    expect(panel({ id: 'd', kind: 'decision', label: 'Free?', source }, true)).not.toContain('<h3>Code</h3>');
+    expect(panel(step(), false)).not.toContain('<h3>Code</h3>');
+    expect(panel(step(), true)).toContain('Link a file…');
+  });
+});
+
+describe('room for the warning', () => {
+  it('wraps a title with a problem short of the badge at its end', () => {
+    const label = 'Record the deposit and email the receipt to the borrower straight away';
+    const plain: VNode = { id: 's', kind: 'step', label, source };
+    const flagged: VNode = { ...plain, problems: [{ severity: 'warning', message: 'x' }] };
+    const widest = (n: VNode) => Math.max(...nodeBox(n, approxMeasure).title.map((line) => approxMeasure(line, 'label')));
+    expect(widest(flagged)).toBeLessThanOrEqual(nodeBox(flagged, approxMeasure).width - 28 - 20);
+    expect(widest(plain)).toBeGreaterThan(widest(flagged));
   });
 });

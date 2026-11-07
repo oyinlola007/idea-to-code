@@ -28,6 +28,7 @@ describe('tool definitions', () => {
         'disconnect_features',
         'expand_node',
         'fill_flow',
+        'link_code',
         'remove_component',
         'remove_edge',
         'remove_feature',

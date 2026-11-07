@@ -724,6 +724,17 @@ button.crumbs__more[aria-expanded='true'] {
   font-weight: 400;
   color: var(--itc-fg);
 }
+.meta__code {
+  display: inline-flex;
+  flex: none;
+  color: var(--itc-muted);
+}
+.meta__code:last-child {
+  margin-right: -3px;
+}
+.meta__code--missing {
+  color: var(--vscode-editorWarning-foreground, var(--itc-fg));
+}
 body.vscode-high-contrast .chip,
 body.vscode-high-contrast-light .chip {
   border: 1px solid var(--vscode-contrastBorder);
@@ -1164,6 +1175,41 @@ body.vscode-high-contrast-light .ring__track {
   align-self: flex-start;
   margin-bottom: 12px;
 }
+
+/* Code links: each opens its file; the warning colour says the file is gone. */
+.code-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--itc-link);
+  font-family: var(--itc-mono);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.code-link span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-link:hover span:last-child {
+  text-decoration: underline;
+}
+.code-link--missing {
+  color: var(--vscode-editorWarning-foreground, var(--itc-fg));
+}
+.details__link-code {
+  align-self: flex-start;
+}
+.details__code {
+  display: flex;
+  flex-direction: column;
+}
 .details__actions {
   flex-wrap: wrap;
 }
@@ -1186,10 +1232,11 @@ body.vscode-high-contrast-light .ring__track {
 
 /* ---------- Problems on the chart ---------- */
 
+/* Right-hand icons share one line, centred 19px from the card's edge, where the open arrow sits; the warning on the title's line. */
 .card__problem {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 12px;
+  right: 10px;
   line-height: 1;
 }
 .card__problem--error {

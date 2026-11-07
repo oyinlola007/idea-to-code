@@ -73,8 +73,17 @@ function pathOf(index: ProjectIndex, flowId: string): string[] {
 
 const NODE_FIELDS = ['type', 'label', 'description', 'kind', 'tech', 'ref', 'expands'] as const;
 
+/** Code links compared as one value: what the list says, in order. */
+function linksChange(a: readonly string[] | undefined, b: readonly string[] | undefined): FieldChange[] {
+  const from = a && a.length > 0 ? a.join(', ') : null;
+  const to = b && b.length > 0 ? b.join(', ') : null;
+  return from === to ? [] : [{ field: 'implements', from, to }];
+}
+
+const linksOf = (n: object): string[] | undefined => ('implements' in n ? (n.implements as string[] | undefined) : undefined);
+
 function nodeFields(a: PlanNode, b: PlanNode): FieldChange[] {
-  return fieldChanges<Record<string, unknown>>(a, b, NODE_FIELDS);
+  return [...fieldChanges<Record<string, unknown>>(a, b, NODE_FIELDS), ...linksChange(linksOf(a), linksOf(b))];
 }
 
 const statusOf = (n: PlanNode): string | null => (n.type === 'step' || n.type === 'component' ? (n.status ?? 'todo') : null);
@@ -123,7 +132,10 @@ export function diffProjects(a: Project, b: Project): PlanDiff {
         changes.push({ ...atOverview, kind: 'component-added', id: c.id, label: c.label });
         continue;
       }
-      const changed = fieldChanges(before, c, ['label', 'kind', 'tech', 'description']);
+      const changed = [
+        ...fieldChanges(before, c, ['label', 'kind', 'tech', 'description']),
+        ...linksChange(before.implements, c.implements),
+      ];
       if (changed.length > 0) changes.push({ ...atOverview, kind: 'component-changed', id: c.id, label: c.label, fields: changed });
       const from = before.status ?? 'todo';
       const to = c.status ?? 'todo';

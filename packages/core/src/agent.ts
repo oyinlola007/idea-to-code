@@ -46,6 +46,7 @@ How to work:
 - When the user says "here", "this" or "this step", call get_current_view to see which part of the chart they have open.
 - Change the plan only with these tools, not by editing the YAML. Every change is checked: if a tool returns an error, read it, fix the call and try again.
 - While building the app, mark steps in_progress and done with set_status, so the plan shows real progress.
+- When you build a step or component, link the files that build it with link_code, then mark it done.
 - If there's no plan yet, start one with init_plan.
 
 ${PLANNING_RULES}

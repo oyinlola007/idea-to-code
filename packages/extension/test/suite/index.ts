@@ -9,6 +9,7 @@ import { OwnKeyProvider } from '../../src/models/ownKey.js';
 import { ModelError, type ChatRequest } from '../../src/models/provider.js';
 import { VsCodePlanFiles } from '../../src/vscodePlanFiles.js';
 import { startFakeModelServer } from './fakeModelServer.js';
+import { codeLinkSteps } from './codeLinks.js';
 import { journeyScenario } from './journey.js';
 import {
   failures,
@@ -541,12 +542,12 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
     const bookings = join(root, 'plan', 'features', 'bookings.yaml');
     const original = await readFile(bookings, 'utf8');
     await writeFile(bookings, `${original}\nstauts: oops\n`);
-    await until('diagnostics', () => vscode.languages.getDiagnostics().some(([, list]) => list.some((d) => d.source === 'idea-to-code')));
+    // The fixture's deliberately missing code link is always there; this is about the typo.
+    const typo = () =>
+      vscode.languages.getDiagnostics().some(([, list]) => list.some((d) => d.source === 'idea-to-code' && d.code !== 'code-link-missing'));
+    await until('diagnostics', typo);
     await writeFile(bookings, original);
-    await until(
-      'diagnostics to clear',
-      () => !vscode.languages.getDiagnostics().some(([, list]) => list.some((d) => d.source === 'idea-to-code')),
-    );
+    await until('diagnostics to clear', () => !typo());
   });
 
   await step('no history, no service, no trace', async () => {
@@ -610,7 +611,10 @@ export async function run(): Promise<void> {
   if (scenario === 'empty') await emptyScenario(api, folder.uri.fsPath);
   else if (scenario === 'restricted') await restrictedScenario(api, folder.uri, folder.uri.fsPath);
   else if (scenario === 'journey') await journeyScenario(api, folder.uri.fsPath);
-  else await planScenario(api, folder.uri, folder.uri.fsPath);
+  else {
+    await planScenario(api, folder.uri, folder.uri.fsPath);
+    await codeLinkSteps(api, folder.uri.fsPath);
+  }
 
   if (failures.length > 0) throw new Error(`${String(failures.length)} step(s) failed:\n${failures.join('\n')}`);
 }

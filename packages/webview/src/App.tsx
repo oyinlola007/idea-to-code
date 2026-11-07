@@ -592,6 +592,12 @@ function Viewer({
             onSource={(node) => {
               send({ type: 'open-source', file: node.source.file, line: Math.max(node.source.line, 1) });
             }}
+            onOpenCode={(path) => {
+              send({ type: 'open-code', path });
+            }}
+            onLinkCode={(node) => {
+              send({ type: 'link-code', nodeId: node.id });
+            }}
           />
         )}
       </main>

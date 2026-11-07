@@ -107,6 +107,14 @@
                     "expands": {
                       "type": "string",
                       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                    },
+                    "implements": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Files or folders that implement this, relative to the project"
                     }
                   },
                   "required": [
@@ -178,6 +186,14 @@
                     "expands": {
                       "type": "string",
                       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                    },
+                    "implements": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Files or folders that implement this, relative to the project"
                     }
                   },
                   "required": [

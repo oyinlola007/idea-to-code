@@ -1,5 +1,6 @@
 // Rules that span files. Issues are returned as data; nothing here throws for
 // a bad plan.
+import { checkCodeLinkPath, codeLinksOf } from './codeLinks.js';
 import { featurePath, positionOf, type Issue, type LoadedFile, type Project, type Severity } from './load.js';
 import { type FeatureFile, type Flow, type MapFile, type PlanNode } from './schema.js';
 
@@ -158,6 +159,15 @@ function checkFlows(project: Project, index: ProjectIndex, out: Collector) {
                   `"${node.id}" has a child flow, so its status is computed from that flow; the stored status is ignored`,
                 );
               }
+              if (node.implements !== undefined && node.implements.length > 0) {
+                out.add(
+                  file,
+                  [...path, 'implements'],
+                  'warning',
+                  'code-link-on-parent',
+                  `"${node.id}" has a child flow, so link code to the steps inside it instead`,
+                );
+              }
             }
           }
         }
@@ -275,6 +285,22 @@ function checkConnections(project: Project, index: ProjectIndex, out: Collector)
   });
 }
 
+/** Code links must stay inside the project. */
+function checkCodeLinks(project: Project, out: Collector) {
+  for (const link of codeLinksOf(project)) {
+    const reason = checkCodeLinkPath(link.path);
+    if (reason !== null)
+      out.issues.push({
+        file: link.file,
+        line: link.line,
+        col: link.col,
+        severity: 'error',
+        code: 'code-link-invalid',
+        message: `code link "${link.path}" on "${link.label}": ${reason}`,
+      });
+  }
+}
+
 export function validateProject(project: Project): Issue[] {
   const out = new Collector();
   if (!project.map) out.addAt('plan/map.yaml', 'error', 'missing-map', 'plan/map.yaml is missing');
@@ -284,6 +310,7 @@ export function validateProject(project: Project): Issue[] {
   checkFeatureFiles(project, index, out);
   checkFlows(project, index, out);
   checkConnections(project, index, out);
+  checkCodeLinks(project, out);
   return [...fileIssues, ...out.issues].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.col - b.col);
 }
 

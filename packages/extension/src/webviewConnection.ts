@@ -3,6 +3,7 @@
 import { HostMessage, WebviewMessage, type AppState } from '@idea-to-code/core';
 import { checkProjectPath } from '@idea-to-code/store';
 import * as vscode from 'vscode';
+import { linkCode, openCode } from './codeLinks.js';
 import type { ProjectHost } from './projectHost.js';
 
 export interface Rendered {
@@ -121,6 +122,12 @@ export function connectWebview(
           break;
         case 'open-source':
           await openSource(host, message.file, message.line, log);
+          break;
+        case 'open-code':
+          await openCode(host, message.path, log);
+          break;
+        case 'link-code':
+          await linkCode(host, message.nodeId);
           break;
       }
     }),

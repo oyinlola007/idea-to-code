@@ -3,6 +3,7 @@
 // from it (tools.ts). On update operations, a missing field stays as it is and
 // null removes it.
 import { z } from 'zod';
+import { checkCodeLinkPath, MAX_CODE_LINK, normalizeCodeLink } from './codeLinks.js';
 import { slugify, uniqueId } from './ids.js';
 import { featurePath, MAP_PATH } from './load.js';
 import {
@@ -308,6 +309,33 @@ export const OPERATIONS: readonly Operation[] = [
       const ref = requireNode(ctx, id);
       refuseStatusOnParent(ctx, id);
       setFields(ctx.doc(ref.file.path), nodePath(ctx, ref), { status });
+      return undefined;
+    },
+  }),
+  defineOperation({
+    name: 'link_code',
+    description:
+      'Set the files or folders that build a step or component (shared components too), as paths relative to the project. Replaces any links it had; an empty list removes them. A node with a child flow takes no links: link the steps inside it. When you build something, link its code, then mark it done with set_status.',
+    input: z.strictObject({ id: Id, paths: z.array(Text.max(MAX_CODE_LINK)).max(50) }),
+    apply(ctx, { id, paths }) {
+      for (const path of paths) {
+        const reason = checkCodeLinkPath(path);
+        if (reason !== null) throw new OpError('invalid-input', `can't link "${path}": ${reason}`);
+      }
+      const links = [...new Set(paths.map(normalizeCodeLink))];
+      const value = links.length > 0 ? links : null;
+      if (ctx.index.components.has(id)) {
+        const { doc, data } = mapData(ctx);
+        setFields(doc, ['components', data.components.findIndex((c) => c.id === id)], { implements: value });
+        return undefined;
+      }
+      const ref = requireNode(ctx, id);
+      if (ref.node.type !== 'step' && ref.node.type !== 'component')
+        throw new OpError('not-allowed', `"${id}" is a ${ref.node.type}; only steps and components link to code`);
+      // Removing links is always fine, so a parent's old links can be cleared.
+      if (value !== null && hasChildFlow(ctx, id))
+        throw new OpError('not-allowed', `"${id}" has a child flow, so link code to the steps inside it instead`);
+      setFields(ctx.doc(ref.file.path), nodePath(ctx, ref), { implements: value });
       return undefined;
     },
   }),

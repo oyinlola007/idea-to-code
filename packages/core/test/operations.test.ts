@@ -155,6 +155,63 @@ describe('connections', () => {
   });
 });
 
+describe('code links', () => {
+  const linksOf = (texts: Record<string, string>, id: string) => {
+    const node = nodeIn(texts, id);
+    return node && 'implements' in node ? node.implements : indexOf(texts).components.get(id)?.implements;
+  };
+
+  it('links a step to files and folders, written one per line', () => {
+    const r = ok(toolshed, 'link_code', { id: 'confirm-booking', paths: ['src/payments/charge.ts', 'src/payments/'] });
+    expect(linksOf(r.texts, 'confirm-booking')).toEqual(['src/payments/charge.ts', 'src/payments']);
+    expect(r.texts[BOOKINGS]).toContain('        implements:\n          - src/payments/charge.ts\n          - src/payments\n');
+    expect(r.changed).toEqual([BOOKINGS]);
+  });
+
+  it('replaces what was linked, and an empty list removes the field', () => {
+    const replaced = ok(toolshed, 'link_code', { id: 'pick-dates', paths: ['src/bookings/pick-dates.ts', 'src/bookings/pick-dates.ts'] });
+    expect(linksOf(replaced.texts, 'pick-dates')).toEqual(['src/bookings/pick-dates.ts']);
+    const cleared = ok(replaced.texts, 'link_code', { id: 'pick-dates', paths: [] });
+    expect(linksOf(cleared.texts, 'pick-dates')).toBeUndefined();
+    expect(cleared.texts[BOOKINGS]).not.toMatch(/id: pick-dates[\s\S]{0,80}implements/);
+  });
+
+  it('links shared components on the overview', () => {
+    const r = ok(toolshed, 'link_code', { id: 'sms-service', paths: ['src/sms.ts'] });
+    expect(linksOf(r.texts, 'sms-service')).toEqual(['src/sms.ts']);
+    expect(r.changed).toEqual([MAP]);
+  });
+
+  it('refuses a step that has a child flow, pointing at the steps inside, but lets its old links be cleared', () => {
+    const f = fails(toolshed, 'link_code', { id: 'take-deposit', paths: ['src/payments/'] });
+    expect(f).toMatchObject({ code: 'not-allowed' });
+    expect(f.message).toContain('steps inside');
+    const old = {
+      ...toolshed,
+      [BOOKINGS]: (toolshed[BOOKINGS] ?? '').replace(
+        '        label: Take deposit\n',
+        '        label: Take deposit\n        implements:\n          - src/payments\n',
+      ),
+    };
+    const cleared = applyOperation(old, { name: 'link_code', input: { id: 'take-deposit', paths: [] } });
+    expect(cleared.ok && linksOf(cleared.texts, 'take-deposit')).toBeUndefined();
+  });
+
+  it('refuses decisions, references and features, and ids that don’t exist', () => {
+    expect(fails(toolshed, 'link_code', { id: 'tool-available', paths: ['src/a.ts'] })).toMatchObject({ code: 'not-allowed' });
+    expect(fails(toolshed, 'link_code', { id: 'bookings', paths: ['src/a.ts'] }).code).toMatch(/not-found|not-allowed/);
+    expect(fails(toolshed, 'link_code', { id: 'nope', paths: ['src/a.ts'] })).toMatchObject({ code: 'not-found' });
+  });
+
+  it('refuses paths that leave the project, and changes nothing', () => {
+    for (const path of ['/etc/passwd', '../secret.ts', 'src/../../x', 'C:/x.ts', 'src\\x.ts', 'a//b']) {
+      const f = fails(toolshed, 'link_code', { id: 'confirm-booking', paths: [path] });
+      expect(f.code, path).toBe('invalid-input');
+      expect(f.message).toContain(path);
+    }
+  });
+});
+
 describe('nodes', () => {
   it('adds a node with a generated id, in block style', () => {
     const r = ok(toolshed, 'add_node', { flowId: 'take-deposit-flow', type: 'step', label: 'Send receipt' });
@@ -198,7 +255,7 @@ describe('nodes', () => {
 
   it('renames without changing the id, and clears fields with null', () => {
     const r = ok(toolshed, 'update_node', { id: 'pick-dates', label: 'Choose dates', status: null });
-    expect(nodeIn(r.texts, 'pick-dates')).toEqual({ id: 'pick-dates', type: 'step', label: 'Choose dates' });
+    expect(nodeIn(r.texts, 'pick-dates')).toEqual({ id: 'pick-dates', type: 'step', label: 'Choose dates', implements: ['src/bookings/'] });
   });
 
   it('tells the agent what to do about unknown flows and nodes', () => {

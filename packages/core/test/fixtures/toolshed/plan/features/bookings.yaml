@@ -10,10 +10,14 @@ flows:
         type: step
         label: Browse tools nearby
         status: done
+        implements:
+          - src/bookings/browse.ts
       - id: pick-dates
         type: step
         label: Pick dates
         status: done
+        implements:
+          - src/bookings/
       - id: tool-available
         type: decision
         label: Tool available?
@@ -111,6 +115,9 @@ flows:
         type: step
         label: Record the deposit
         status: todo
+        # Points at code that doesn't exist yet, so the tests see a missing link.
+        implements:
+          - src/payments/deposit.ts
       - id: release-hold
         type: step
         label: Release the hold

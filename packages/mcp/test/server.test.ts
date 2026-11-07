@@ -4,7 +4,7 @@ import { OPERATIONS } from '@idea-to-code/core';
 import { HistoryStore } from '@idea-to-code/store';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,7 @@ async function temp(): Promise<string> {
 
 async function connect(options: { plan?: boolean; clientName?: string } = {}) {
   const root = await temp();
-  if (options.plan ?? true) await cp(join(TOOLSHED, 'plan'), join(root, 'plan'), { recursive: true });
+  if (options.plan ?? true) await cp(TOOLSHED, root, { recursive: true });
   const store = new HistoryStore(await temp());
   const mcp: McpPlanServer = createServer({ root, store, log: () => undefined });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
@@ -155,7 +155,28 @@ describe('where the user is', () => {
 describe('checking the plan', () => {
   it('finds no errors in a good plan, and lists what is still to do', async () => {
     const { call } = await connect();
-    expect((await call('validate')).text).toMatch(/^No errors, 3 warnings:\n<plan>\nplan\/map\.yaml:7:5 warning feature-without-flows: /);
+    expect((await call('validate')).text).toMatch(
+      /^No errors, 4 warnings:\n<plan>\nplan\/features\/bookings\.yaml:\d+:\d+ warning code-link-missing: /,
+    );
+  });
+
+  it('checks code links against the files in the project', async () => {
+    const { root, call } = await connect();
+    const before = (await call('validate')).text;
+    expect(before).toMatch(/code-link-missing: "Record the deposit" links to src\/payments\/deposit\.ts, which doesn't exist/);
+    await mkdir(join(root, 'src', 'payments'), { recursive: true });
+    await writeFile(join(root, 'src', 'payments', 'deposit.ts'), 'export {};\n');
+    expect((await call('validate')).text).not.toContain('code-link-missing');
+  });
+
+  it('links code for an agent, recorded under its name, and shows it in the flow', async () => {
+    const { call, snapshots } = await connect();
+    expect((await call('link_code', { id: 'confirm-booking', paths: ['src/bookings/confirm.ts'] })).isError).toBe(false);
+    expect((await snapshots()).at(-1)).toMatchObject({ source: 'mcp', actor: 'claude-code' });
+    expect((await call('get_flow', { flowId: 'place-booking-flow' })).text).toContain('code=src/bookings/confirm.ts');
+    expect((await call('link_code', { id: 'confirm-booking', paths: ['../outside.ts'] })).text).toMatch(
+      /invalid-input.*stay inside the project/,
+    );
   });
 
   it('says so when there is nothing at all', async () => {
@@ -168,7 +189,7 @@ describe('checking the plan', () => {
     const { root, call, read } = await connect();
     await writeFile(join(root, 'plan/map.yaml'), (await read('plan/map.yaml')).replace('  - id: catalogue', '  - id: bookings'));
     const result = await call('validate');
-    expect(result.text).toMatch(/^2 errors, 2 warnings:\n<plan>\n/);
+    expect(result.text).toMatch(/^2 errors, 3 warnings:\n<plan>\n/);
     expect(result.text).toMatch(/^plan\/map\.yaml:13:5 error duplicate-id: id "bookings" is already used/m);
   });
 });

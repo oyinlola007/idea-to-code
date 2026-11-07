@@ -66,6 +66,14 @@
               "in_progress",
               "done"
             ]
+          },
+          "implements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Files or folders that implement this, relative to the project"
           }
         },
         "required": [

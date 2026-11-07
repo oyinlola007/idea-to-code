@@ -2,7 +2,8 @@
 // with parents, progress and source lines resolved here so the webview only draws.
 // The schemas are the source of truth: both sides of the bridge parse with them.
 import { z } from 'zod';
-import { featurePath, positionOf, type LoadedFile, type Project } from './load.js';
+import { normalizeCodeLink } from './codeLinks.js';
+import { featurePath, positionOf, type Issue, type LoadedFile, type Project } from './load.js';
 import { flowProgress, OVERVIEW } from './progress.js';
 import { nodeLabel, type PlanNode } from './schema.js';
 import { indexProject, MAIN, validateProject, type ProjectIndex } from './validate.js';
@@ -28,6 +29,8 @@ const VNode = z.strictObject({
   /** For references: the level the target lives at, when it has one. */
   jumpsTo: z.string().optional(),
   refLabel: z.string().optional(),
+  /** The files or folders that build it; `missing` when the host found nothing there. */
+  code: z.array(z.strictObject({ path: z.string(), missing: z.boolean().optional() })).optional(),
   /** Computed for nodes that open a level. */
   progress: ProgressCount.optional(),
   /** An overview feature that has no flows yet. */
@@ -173,7 +176,12 @@ function edgesOf(edges: { from: string; to: string; label?: string; data?: strin
   }));
 }
 
-function flowNode(index: ProjectIndex, n: PlanNode, source: SourcePos): VNode {
+function codeOf(paths: readonly string[] | undefined, missing: ReadonlySet<string>): VNode['code'] {
+  if (!paths || paths.length === 0) return undefined;
+  return paths.map((path) => (missing.has(normalizeCodeLink(path)) ? { path, missing: true } : { path }));
+}
+
+function flowNode(index: ProjectIndex, n: PlanNode, source: SourcePos, missing: ReadonlySet<string>): VNode {
   const v: VNode = { id: n.id, kind: n.type, label: nodeLabel(n), source };
   if (n.description) v.description = n.description;
   if (n.type === 'component') {
@@ -181,6 +189,8 @@ function flowNode(index: ProjectIndex, n: PlanNode, source: SourcePos): VNode {
     if (n.tech) v.tech = n.tech;
   }
   if (n.type === 'step' || n.type === 'component') {
+    const code = codeOf(n.implements, missing);
+    if (code) v.code = code;
     const child = n.expands ? index.flows.get(n.expands) : undefined;
     if (child?.parentNodeId === n.id) {
       // A parent's progress is computed; a stored status is ignored (status-on-parent).
@@ -209,7 +219,15 @@ function flowNode(index: ProjectIndex, n: PlanNode, source: SourcePos): VNode {
   return v;
 }
 
-export function buildViewModel(project: Project): ViewModel {
+export interface ViewOptions {
+  /** Code links the host found nothing at (normalized paths). */
+  missingCode?: ReadonlySet<string>;
+  /** Problems the host found that core can't see, e.g. missing code. */
+  extraIssues?: readonly Issue[];
+}
+
+export function buildViewModel(project: Project, options: ViewOptions = {}): ViewModel {
+  const missing = options.missingCode ?? new Set<string>();
   const index = indexProject(project);
   const map = index.map;
   const title = map?.project ?? 'Plan';
@@ -239,6 +257,8 @@ export function buildViewModel(project: Project): ViewModel {
     if (c.tech) node.tech = c.tech;
     if (c.description) node.description = c.description;
     if (c.status) node.status = c.status;
+    const code = codeOf(c.implements, missing);
+    if (code) node.code = code;
     overviewNodes.push(node);
   });
   const work = overviewNodes.reduce(
@@ -271,7 +291,7 @@ export function buildViewModel(project: Project): ViewModel {
       crumbs,
       depth: crumbs.length - 1,
       // The flow's own node list, not index.nodes: duplicates are still drawn where they're written.
-      nodes: ref.flow.nodes.map((n, i) => flowNode(index, n, pos(ref.file, ['flows', ref.key, 'nodes', i]))),
+      nodes: ref.flow.nodes.map((n, i) => flowNode(index, n, pos(ref.file, ['flows', ref.key, 'nodes', i]), missing)),
       edges: edgesOf(ref.flow.edges),
       progress: flowProgress(index, ref.id),
       source: pos(ref.file, ['flows', ref.key]),
@@ -281,7 +301,7 @@ export function buildViewModel(project: Project): ViewModel {
   }
 
   // A listed feature without flows is a normal stage of planning, and its card already says so.
-  const issues = validateProject(project)
+  const issues = [...validateProject(project), ...(options.extraIssues ?? [])]
     .filter((i) => i.code !== 'feature-without-flows')
     .map((i) => ({ file: i.file, line: i.line, severity: i.severity, code: i.code, message: i.message }));
   attachProblems(project, levels, issues);

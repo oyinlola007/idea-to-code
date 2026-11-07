@@ -14,12 +14,15 @@ import {
   runReadTool,
   toolDefinitions,
   validateProject,
+  codeLinkPaths,
+  missingCodeLinkIssues,
   type ToolDefinition,
 } from '@idea-to-code/core';
 import { NodePlanFiles, ProjectService, type HistoryStore } from '@idea-to-code/store';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
-import { basename } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { serverInfo } from './info.js';
 import { errorResult, issuesResult, opResult, textResult, viewResult, type ToolResult } from './results.js';
 
@@ -75,6 +78,19 @@ export function serverTools(): Tool[] {
   return [...readToolDefinitions(), ...OWN_TOOLS, ...toolDefinitions()].map(toTool);
 }
 
+/** The code links nothing exists at. Paths come from codeLinkPaths, so they're inside the project. */
+async function missingCode(root: string, paths: readonly string[]): Promise<Set<string>> {
+  const found = await Promise.all(
+    paths.map((path) =>
+      stat(join(root, ...path.split('/'))).then(
+        () => true,
+        () => false,
+      ),
+    ),
+  );
+  return new Set(paths.filter((_, i) => !found[i]));
+}
+
 const OPERATION_NAMES = new Set(OPERATIONS.map((op) => op.name));
 const NO_PLAN = "There's no plan in this project yet. Call init_plan to start one.";
 
@@ -127,7 +143,12 @@ export function createServer(options: ServerOptions): McpPlanServer {
       const read = runReadTool(loadFromTexts(await project.readPlan()), name, input);
       return read.ok ? textResult(read.text) : errorResult(read.text);
     }
-    if (name === 'validate') return issuesResult(validateProject(loadFromTexts(await project.readPlan())));
+    if (name === 'validate') {
+      const plan = loadFromTexts(await project.readPlan());
+      const missing = await missingCode(root, codeLinkPaths(plan));
+      const issues = [...validateProject(plan), ...missingCodeLinkIssues(plan, missing)];
+      return issuesResult(issues.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.col - b.col));
+    }
     if (name === 'get_current_view') {
       const view = (await project.projectHistory?.readView()) ?? null;
       return viewResult(view, buildViewModel(loadFromTexts(await project.readPlan())), now());

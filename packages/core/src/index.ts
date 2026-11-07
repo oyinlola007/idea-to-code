@@ -2,6 +2,7 @@
 // extension, the MCP server and agents' tools all go through here.
 export * from './agent.js';
 export * from './bridge.js';
+export * from './codeLinks.js';
 export * from './connectors.js';
 export * from './diff.js';
 export * from './diffSummary.js';
