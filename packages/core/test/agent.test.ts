@@ -37,6 +37,14 @@ describe('plan text is data', () => {
 });
 
 describe('the MCP instructions', () => {
+  it('tell agents how to map an existing codebase without inventing or undoing anything', () => {
+    const recipe = MCP_INSTRUCTIONS.slice(MCP_INSTRUCTIONS.indexOf('Mapping an existing codebase'));
+    expect(recipe).toContain('map only what exists');
+    expect(recipe).toContain('link_code');
+    expect(recipe).toContain("Don't add features or steps the code doesn't have");
+    expect(recipe).toContain('Never remove or rename planned steps');
+  });
+
   it('share the planning rules with the built-in agent', () => {
     const rules = AGENT_INSTRUCTIONS.slice(
       AGENT_INSTRUCTIONS.indexOf('How to plan well:'),

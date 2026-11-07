@@ -10,6 +10,14 @@ const guide = generateGuide();
 const yamlBlocks = guide.match(/```yaml\n[\s\S]*?```/g)?.map((b) => b.replace(/^```yaml\n/, '').replace(/```$/, '')) ?? [];
 
 describe('generateGuide', () => {
+  it('has a recipe for mapping an existing codebase: only what exists, done only where built, never undoing planned steps', () => {
+    const recipe = guide.slice(guide.indexOf('**Map an existing codebase:**'));
+    expect(recipe).toContain('map only what exists');
+    expect(recipe).toContain('`status: done` only where the code clearly does that step');
+    expect(recipe).toContain("Don't add features the code doesn't have");
+    expect(recipe).toContain('never remove or rename planned steps');
+  });
+
   it('shows examples that are a valid plan', () => {
     expect(yamlBlocks).toHaveLength(2);
     const project = loadFromTexts({ 'plan/map.yaml': yamlBlocks[0] ?? '', 'plan/features/bookings.yaml': yamlBlocks[1] ?? '' });

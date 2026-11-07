@@ -180,6 +180,7 @@ Every node has \`id\`, \`type\` and \`label\` (\`start\` and \`end\` may leave o
 - **Add detail under a step:** pick a flow key (e.g. \`<node-id>-flow\`), add \`expands: <flow-key>\` to the node, and add the flow under \`flows:\` with \`label\`, \`nodes\` and \`edges\`. Remove any \`status\` from the parent node.
 - **Add a feature:** add it under \`features\` in \`map.yaml\`, create \`features/<id>.yaml\` with \`feature: <id>\` and a \`main\` flow, and add \`connections\` to the features it feeds.
 - **Use a shared component in a flow:** add a \`reference\` node with \`ref: <component-id>\`.
+- **Map an existing codebase:** read the project's structure first, then map only what exists. Make one feature per area of the app, with a \`main\` flow for what its code does. Add a child flow only where a step has its own module, no more than three levels deep. Link each step to the files that build it in \`implements\`, and set \`status: done\` only where the code clearly does that step; leave the rest without a status. Don't add features the code doesn't have. If a plan already exists, link and mark its steps first, then add what's missing; never remove or rename planned steps.
 
 ## Checking your work
 

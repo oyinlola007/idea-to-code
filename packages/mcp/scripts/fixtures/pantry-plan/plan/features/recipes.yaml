@@ -1,0 +1,14 @@
+feature: recipes
+flows:
+  main:
+    label: Recipes
+    nodes:
+      - id: search-recipes
+        type: step
+        label: Search recipes by name or ingredient
+      - id: save-recipe
+        type: step
+        label: Save a favourite
+    edges:
+      - from: search-recipes
+        to: save-recipe

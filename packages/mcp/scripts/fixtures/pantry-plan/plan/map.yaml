@@ -1,0 +1,8 @@
+# A half-written plan for the fictitious Pantry app, to test mapping into an existing plan.
+project: Pantry
+features:
+  - id: recipes
+    label: Recipes
+    description: Find recipes and keep the good ones.
+  - id: shopping
+    label: Shopping list
