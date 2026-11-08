@@ -98,6 +98,8 @@ interface ToolbarProps {
   historyOpen: boolean;
   onToggleHistory: () => void;
   onUndo: () => void;
+  /** A shared web page, which has its own light and dark switch. */
+  readOnly: boolean;
 }
 
 /** Adds a feature on the overview, or a step or decision inside a flow. */
@@ -169,7 +171,7 @@ function AddButton({ level, onAdd }: { level: Level; onAdd: ToolbarProps['onAdd'
   );
 }
 
-function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd, history, historyOpen, onToggleHistory, onUndo }: ToolbarProps) {
+function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd, history, historyOpen, onToggleHistory, onUndo, readOnly }: ToolbarProps) {
   const { done, total } = level.progress;
   return (
     <header className="toolbar">
@@ -235,6 +237,19 @@ function Toolbar({ level, nav, canEdit, onHistory, onGo, onAdd, history, history
           <ProgressRing progress={level.progress} size={14} />
           {total > 0 ? `${String(done)}/${String(total)}` : '—'}
         </span>
+        {readOnly && (
+          <button
+            type="button"
+            className="icon-button"
+            title="Light or dark"
+            aria-label="Switch between light and dark"
+            onClick={() => {
+              send({ type: 'toggle-theme' });
+            }}
+          >
+            <span className="codicon codicon-color-mode" aria-hidden="true" />
+          </button>
+        )}
       </div>
     </header>
   );
@@ -257,6 +272,8 @@ function firstMeasure(): Measure {
 
 interface ViewerProps {
   trusted: boolean;
+  /** A shared web page: reading only, with no editor behind it. */
+  readOnly: boolean;
   /** The built-in agent is working: edits wait, navigation doesn't. */
   agentBusy: boolean;
   model: ViewModel;
@@ -273,6 +290,7 @@ interface ViewerProps {
 
 function Viewer({
   trusted,
+  readOnly,
   agentBusy,
   model,
   version,
@@ -506,6 +524,7 @@ function Viewer({
         level={level}
         nav={nav}
         canEdit={trusted && !agentBusy}
+        readOnly={readOnly}
         history={planHistory}
         historyOpen={historyPanel !== null}
         onToggleHistory={() => {
@@ -524,7 +543,7 @@ function Viewer({
           void goOut(target);
         }}
       />
-      {!trusted && (
+      {!trusted && !readOnly && (
         <p className="level-description">
           Restricted Mode: view-only, and no history is recorded. Trust this folder to turn everything on.
         </p>
@@ -581,6 +600,7 @@ function Viewer({
             node={selectedNode}
             level={level}
             canEdit={trusted && !agentBusy}
+            readOnly={readOnly}
             onEdit={onEdit}
             onFirstStep={(node, label) => {
               void onFirstStep(node, label);
@@ -696,6 +716,7 @@ export function App() {
       {state.kind === 'plan' && shown ? (
         <Viewer
           trusted={state.trusted}
+          readOnly={state.readOnly === true}
           agentBusy={state.agentBusy === true}
           model={shown.model}
           version={shown.version}

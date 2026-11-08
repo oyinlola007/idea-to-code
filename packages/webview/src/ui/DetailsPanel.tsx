@@ -26,6 +26,8 @@ interface Props {
   level: Level;
   /** False in Restricted Mode. */
   canEdit: boolean;
+  /** A shared web page: no editor behind it to open files in. */
+  readOnly?: boolean;
   onEdit: (edit: Edit) => Promise<boolean>;
   onFirstStep: (node: VNode, label: string) => void;
   onClose: () => void;
@@ -41,10 +43,11 @@ interface Props {
 function CodeLinks({
   node,
   canEdit,
+  readOnly,
   onEdit,
   onOpenCode,
   onLinkCode,
-}: Pick<Props, 'node' | 'canEdit' | 'onEdit' | 'onOpenCode' | 'onLinkCode'>) {
+}: Pick<Props, 'node' | 'canEdit' | 'readOnly' | 'onEdit' | 'onOpenCode' | 'onLinkCode'>) {
   const links = node.code ?? [];
   // A card with a child flow takes no links, but any old ones are listed so they can be removed.
   const canLink = canEdit && node.opens === undefined;
@@ -57,20 +60,27 @@ function CodeLinks({
         <ul>
           {links.map((link) => (
             <li key={link.path}>
-              <button
-                type="button"
-                className={`code-link${link.missing === true ? ' code-link--missing' : ''}`}
-                title={link.missing === true ? `${link.path} doesn't exist` : `Open ${link.path}`}
-                onClick={() => {
-                  onOpenCode(link.path);
-                }}
-              >
-                <span
-                  className={`codicon codicon-${link.missing === true ? 'warning' : link.path.endsWith('/') ? 'folder' : 'file-code'}`}
-                  aria-hidden="true"
-                />
-                <span>{link.path}</span>
-              </button>
+              {readOnly === true ? (
+                <span className="code-link code-link--plain">
+                  <span className={`codicon codicon-${link.path.endsWith('/') ? 'folder' : 'file-code'}`} aria-hidden="true" />
+                  <span>{link.path}</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className={`code-link${link.missing === true ? ' code-link--missing' : ''}`}
+                  title={link.missing === true ? `${link.path} doesn't exist` : `Open ${link.path}`}
+                  onClick={() => {
+                    onOpenCode(link.path);
+                  }}
+                >
+                  <span
+                    className={`codicon codicon-${link.missing === true ? 'warning' : link.path.endsWith('/') ? 'folder' : 'file-code'}`}
+                    aria-hidden="true"
+                  />
+                  <span>{link.path}</span>
+                </button>
+              )}
               {canEdit && (
                 <button
                   type="button"
@@ -128,7 +138,19 @@ function EdgeRow({ peer, edge, onRemove }: { peer: string; edge: VEdge; onRemove
   );
 }
 
-export function DetailsPanel({ node, level, canEdit, onEdit, onFirstStep, onClose, onOpen, onSource, onOpenCode, onLinkCode }: Props) {
+export function DetailsPanel({
+  node,
+  level,
+  canEdit,
+  readOnly,
+  onEdit,
+  onFirstStep,
+  onClose,
+  onOpen,
+  onSource,
+  onOpenCode,
+  onLinkCode,
+}: Props) {
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [addingStep, setAddingStep] = useState(false);
@@ -244,7 +266,7 @@ export function DetailsPanel({ node, level, canEdit, onEdit, onFirstStep, onClos
         <p className="details__description details__description--empty">No description yet.</p>
       )}
 
-      <CodeLinks node={node} canEdit={canEdit} onEdit={onEdit} onOpenCode={onOpenCode} onLinkCode={onLinkCode} />
+      <CodeLinks node={node} canEdit={canEdit} readOnly={readOnly} onEdit={onEdit} onOpenCode={onOpenCode} onLinkCode={onLinkCode} />
 
       {(incoming.length > 0 || outgoing.length > 0 || targets.length > 0) && (
         <section className="details__flows">
@@ -344,16 +366,18 @@ export function DetailsPanel({ node, level, canEdit, onEdit, onFirstStep, onClos
             <span className="codicon codicon-chevron-right" aria-hidden="true" />
           </button>
         )}
-        <button
-          type="button"
-          className="button button--secondary"
-          onClick={() => {
-            onSource(node);
-          }}
-        >
-          <span className="codicon codicon-go-to-file" aria-hidden="true" />
-          Open in YAML
-        </button>
+        {readOnly !== true && (
+          <button
+            type="button"
+            className="button button--secondary"
+            onClick={() => {
+              onSource(node);
+            }}
+          >
+            <span className="codicon codicon-go-to-file" aria-hidden="true" />
+            Open in YAML
+          </button>
+        )}
         {canEdit &&
           (confirming ? (
             <button

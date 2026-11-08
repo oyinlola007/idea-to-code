@@ -10,6 +10,7 @@ import { ModelError, type ChatRequest } from '../../src/models/provider.js';
 import { VsCodePlanFiles } from '../../src/vscodePlanFiles.js';
 import { startFakeModelServer } from './fakeModelServer.js';
 import { codeLinkSteps } from './codeLinks.js';
+import { exportPageSteps } from './exportPage.js';
 import { journeyScenario } from './journey.js';
 import {
   failures,
@@ -614,6 +615,7 @@ export async function run(): Promise<void> {
   else {
     await planScenario(api, folder.uri, folder.uri.fsPath);
     await codeLinkSteps(api, folder.uri.fsPath);
+    await exportPageSteps();
   }
 
   if (failures.length > 0) throw new Error(`${String(failures.length)} step(s) failed:\n${failures.join('\n')}`);

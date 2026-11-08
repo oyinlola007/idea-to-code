@@ -7,6 +7,7 @@ import { ChatStore } from './chat/transcript.js';
 import { VsCodeChatFiles } from './chat/vscodeChatFiles.js';
 import { CHAT_VIEW_ID, ChatViewProvider, pickChat } from './chatView.js';
 import { detectOptionalApis, type OptionalApis } from './detect.js';
+import { exportWebPage } from './exportPage.js';
 import { registerMcpServer } from './mcpServer.js';
 import { initPlan, type InitOptions } from './initPlan.js';
 import { ModelHost } from './models/modelHost.js';
@@ -91,6 +92,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.commands.registerCommand('ideaToCode.openApp', () => {
       app.show();
     }),
+    vscode.commands.registerCommand('ideaToCode.exportWebPage', (target?: vscode.Uri) => exportWebPage(context.extensionUri, host, target)),
     vscode.commands.registerCommand('ideaToCode.showHistory', (session?: string) => {
       app.showHistory(session);
     }),

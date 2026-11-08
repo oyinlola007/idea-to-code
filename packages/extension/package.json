@@ -61,6 +61,11 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "ideaToCode.exportWebPage",
+        "title": "Export as Web Page",
+        "category": "idea-to-code"
+      },
+      {
         "command": "ideaToCode.initPlan",
         "title": "Initialize Plan in This Workspace",
         "category": "idea-to-code",
@@ -198,7 +203,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "node esbuild.mjs",
-    "test:ext": "tsx scripts/run-ext-tests.ts"
+    "test:ext": "tsx scripts/run-ext-tests.ts",
+    "export-sample": "tsx scripts/export-sample.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.93",

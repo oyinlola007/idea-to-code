@@ -86,6 +86,8 @@ export const AppState = z.discriminatedUnion('kind', [
     history: HistoryView.nullable(),
     /** The built-in agent is working: the chart shows its changes so far, and edits wait until it's done. */
     agentBusy: z.boolean().optional(),
+    /** A shared web page: only reading, with no editor to edit in or open files from. */
+    readOnly: z.literal(true).optional(),
   }),
 ]);
 export type AppState = z.infer<typeof AppState>;
@@ -285,6 +287,8 @@ export const WebviewMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('open-code'), path: z.string().max(300) }),
   /** Pick files or folders in the editor and link them to a card. */
   z.strictObject({ type: z.literal('link-code'), nodeId: z.string().max(200) }),
+  /** A shared web page's light/dark switch, answered by the page itself; the editor ignores it. */
+  z.strictObject({ type: z.literal('toggle-theme') }),
   z.strictObject({ type: z.literal('chat-get') }),
   z.strictObject({ type: z.literal('chat-send'), text: z.string().min(1).max(20_000) }),
   z.strictObject({ type: z.literal('chat-cancel') }),

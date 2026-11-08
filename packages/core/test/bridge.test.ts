@@ -119,6 +119,7 @@ describe('chat messages', () => {
       { type: 'chat-open', id: 't1' },
       { type: 'chat-action', action: 'undo' },
       { type: 'chat-show-changes', reveal: { level: 'overview', ids: [] } },
+      { type: 'toggle-theme' },
       { type: 'settings-shown', shown: true },
       { type: 'chart-settings-set', patch: { openAs: 'text' } },
     ]) {

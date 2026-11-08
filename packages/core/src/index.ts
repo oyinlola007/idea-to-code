@@ -16,6 +16,7 @@ export type { OpErrorCode, OpFailure, Operation, OpRequest, OpResult, OpSuccess 
 export * from './progress.js';
 export * from './reveal.js';
 export * from './schema.js';
+export * from './share.js';
 export * from './tools.js';
 export * from './validate.js';
 export * from './viewModel.js';

@@ -1200,6 +1200,13 @@ body.vscode-high-contrast-light .ring__track {
 .code-link:hover span:last-child {
   text-decoration: underline;
 }
+.code-link--plain {
+  color: var(--itc-fg);
+  cursor: default;
+}
+.code-link--plain:hover span:last-child {
+  text-decoration: none;
+}
 .code-link--missing {
   color: var(--vscode-editorWarning-foreground, var(--itc-fg));
 }
