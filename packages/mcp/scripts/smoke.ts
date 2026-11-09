@@ -28,7 +28,7 @@ try {
     .split('\n')
     .sort();
   check(
-    listing.join() === ['package/README.md', 'package/dist/main.js', 'package/package.json'].join(),
+    listing.join() === ['package/LICENSE', 'package/README.md', 'package/dist/main.js', 'package/package.json'].join(),
     `packs only ${listing.join(', ')}`,
   );
 

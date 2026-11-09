@@ -1,10 +1,27 @@
 {
   "name": "idea-to-code-mcp",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "description": "MCP server for idea-to-code plans: plan software as nested flowcharts with any coding agent.",
   "license": "MIT",
+  "author": "Oyinlola Ojelere",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oyinlola007/idea-to-code.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/oyinlola007/idea-to-code/tree/main/packages/mcp#readme",
+  "bugs": "https://github.com/oyinlola007/idea-to-code/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "planning",
+    "flowchart",
+    "claude-code",
+    "cursor",
+    "copilot",
+    "vscode"
+  ],
   "exports": {
     ".": "./src/index.ts"
   },
@@ -13,7 +30,8 @@
   },
   "files": [
     "dist/main.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
@@ -30,5 +48,11 @@
     "@modelcontextprotocol/sdk": "1.32.2",
     "esbuild": "0.28.2",
     "zod": "4.6.7"
+  },
+  "publishConfig": {
+    "exports": {
+      "./package.json": "./package.json"
+    },
+    "access": "public"
   }
 }
