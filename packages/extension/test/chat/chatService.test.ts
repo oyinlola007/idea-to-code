@@ -23,6 +23,8 @@ interface Harness {
   starts: number[];
   /** Sets up a model, as choosing one in Settings does. */
   chooseModel(provider: ModelProvider): Promise<void>;
+  /** Makes a model work without announcing it, as when permission is granted outside Settings. */
+  chooseModelQuietly(provider: ModelProvider): Promise<void>;
 }
 
 const opened: ChatService[] = [];
@@ -118,7 +120,11 @@ async function harness(
     for (let i = 0; i < 50 && (chat.view().busy || chat.view().status !== 'ready'); i++) await new Promise((r) => setTimeout(r, 5));
     while (chat.view().busy) await new Promise((r) => setTimeout(r, 5));
   };
-  return { chat, service, root, files, busy, previews, reveals, clock, refresh, starts, chooseModel };
+  const chooseModelQuietly = (provider: ModelProvider) => {
+    models.large = provider;
+    return Promise.resolve();
+  };
+  return { chat, service, root, files, busy, previews, reveals, clock, refresh, starts, chooseModel, chooseModelQuietly };
 }
 
 const fillReminders: Script = {
@@ -310,6 +316,28 @@ describe('a chat turn', () => {
     await h.chat.send('What is in the plan?');
     await h.chooseModel(model);
     expect(model.requests).toHaveLength(1);
+  });
+
+  it('answers a waiting message when the chat asks again, even with no settings change', async () => {
+    const h = await harness({ large: new ModelError('no-permission', 'Allow idea-to-code to use the model.'), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    const model = scripted([{ text: 'It has five features.' }]);
+    // The model works now, but nothing announced a change.
+    await h.chooseModelQuietly(model);
+    await h.chat.retryWaiting();
+    const items = h.chat.view().items;
+    expect(items.filter((i) => i.kind === 'user')).toHaveLength(1);
+    expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'It has five features.' });
+  });
+
+  it('replaces a message that never reached a model when the next one is sent', async () => {
+    const h = await harness({ large: new ModelError('not-set-up', 'Add your OpenAI API key first.'), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    await h.chooseModelQuietly(scripted([{ text: 'It has five features.' }]));
+    await h.chat.send('What is in the plan?');
+    const items = h.chat.view().items;
+    expect(items.filter((i) => i.kind === 'user')).toHaveLength(1);
+    expect(items.some((i) => 'action' in i && i.action === 'open-model-settings')).toBe(false);
   });
 
   it('only answers a waiting message from the chat it was sent in', async () => {

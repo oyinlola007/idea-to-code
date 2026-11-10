@@ -23,6 +23,8 @@ export interface ChatSource {
   undo(): Promise<void>;
   /** Shows where a turn's changes are on the chart. */
   showChanges(reveal: Reveal): void;
+  /** Answers a message that was waiting for a model, if one works now. */
+  retryWaiting(): Promise<void>;
 }
 
 async function runAction(action: ChatAction, session: string | undefined): Promise<void> {
@@ -119,6 +121,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             // The chat's own buttons mean nothing on the settings, so they hide with it.
             view.title = message.shown ? 'Settings' : 'Chat';
             await vscode.commands.executeCommand('setContext', 'ideaToCode.settingsShown', message.shown);
+            // Back from Settings: a message waiting for a model goes now, even if nothing in Settings changed.
+            if (!message.shown) void this.source.retryWaiting();
             break;
           case 'log':
             if (message.level === 'error') this.events?.errors.push(`chat: ${message.message}`);

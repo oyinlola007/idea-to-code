@@ -116,6 +116,12 @@ export class ChatService {
     await this.checkModel();
   }
 
+  /** Checks the model again and answers a message that was waiting for one. */
+  async retryWaiting(): Promise<void> {
+    await this.checkModel();
+    await this.answerWaiting();
+  }
+
   /** Sends again the message that was waiting for a model, now that the settings changed. */
   private async answerWaiting(): Promise<void> {
     const thread = this.thread;
@@ -324,6 +330,11 @@ export class ChatService {
     }
     const service = this.deps.host.service();
     if (!service || this.status() === 'no-plan') return;
+    // A message that never reached a model is replaced by the next one, with its "Choose a model".
+    if (thread.turns.at(-1)?.error?.action === 'open-model-settings') {
+      thread.turns.pop();
+      this.waitingForModel = undefined;
+    }
     if (thread.turns.length === 0 && thread.title === NEW_TITLE) thread.title = titleFrom(text);
     const turn: Turn = { id: randomUUID(), at: this.now(), user: text, messages: [], outcome: 'running' };
     const live: Live = { turn, controller: new AbortController(), replies: [] };
