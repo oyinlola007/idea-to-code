@@ -848,6 +848,11 @@ body.vscode-high-contrast-light .ring__track {
     stroke 120ms ease,
     opacity 160ms ease;
 }
+/* A line can be picked out, by its path or its label. */
+.react-flow__edge,
+.edge-label {
+  cursor: pointer;
+}
 .react-flow__edge-path.edge--active {
   stroke: var(--itc-accent);
   stroke-width: 1.8;
@@ -906,6 +911,24 @@ body.vscode-high-contrast-light .ring__track {
   background: var(--itc-canvas);
   font-family: var(--itc-mono);
   color: var(--itc-muted);
+}
+.edge-label__data--below {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  width: max-content;
+  max-width: 260px;
+  height: auto;
+  padding-block: 2px;
+  align-items: flex-start;
+  white-space: normal;
+  transform: translateX(-50%);
+}
+.edge-label__data--below .codicon {
+  margin-top: 3px;
+}
+.edge-label--picked {
+  z-index: 1;
 }
 .edge-label__data .codicon {
   font-size: 11px;

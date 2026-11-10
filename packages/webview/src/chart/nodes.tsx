@@ -12,6 +12,8 @@ export interface PlanNodeData extends Record<string, unknown> {
   node: VNode;
   box: NodeBox;
   dimmed: boolean;
+  /** At one end of the line picked out: highlighted like a selected card. */
+  lineEnd?: boolean;
   /** Ringed for a moment: the card we came back to, or one the agent changed. */
   ring: 'arrived' | 'revealed' | null;
   onOpen: (node: VNode) => void;
@@ -157,7 +159,7 @@ function cardClass(node: VNode, selected: boolean, data: PlanNodeData, extra = '
     node.planned ? 'card--planned' : '',
     worst(node) ? `card--has-${worst(node) ?? ''}` : '',
     node.status ? `card--${node.status}` : '',
-    selected ? 'is-selected' : '',
+    selected || data.lineEnd === true ? 'is-selected' : '',
     data.dimmed ? 'is-dimmed' : '',
     data.ring ? `is-${data.ring}` : '',
     extra,

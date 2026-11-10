@@ -102,6 +102,40 @@ describe('navigation', () => {
     expect(currentLevel(s)).toBe('a');
   });
 
+  it('picks out one line at a time, instead of a card, and Escape or the background clears it', () => {
+    const lined = {
+      ...model,
+      levels: { ...model.levels, a: { ...model.levels.a, edges: [{ id: 'e1', from: 'a-node', to: 'a-node' }] } },
+    } as ViewModel;
+    let s = run(
+      [
+        { type: 'open', level: 'a' },
+        { type: 'select', id: 'a-node' },
+        { type: 'selectLine', id: 'e1' },
+      ],
+      lined,
+    );
+    expect(s).toMatchObject({ line: 'e1', selected: null, details: false });
+    expect(navReducer(lined)(s, { type: 'select', id: 'a-node' })).toMatchObject({ line: null, selected: 'a-node' });
+    expect(navReducer(lined)(s, { type: 'clickAway' })).toMatchObject({ line: null, selected: null });
+    s = navReducer(lined)(s, { type: 'escape' });
+    expect(s).toMatchObject({ line: null });
+    expect(currentLevel(s)).toBe('a');
+    expect(navReducer(lined)(s, { type: 'reconcile' }).line).toBeNull();
+    const kept = navReducer(lined)(
+      run(
+        [
+          { type: 'open', level: 'a' },
+          { type: 'selectLine', id: 'e1' },
+        ],
+        lined,
+      ),
+      { type: 'reconcile' },
+    );
+    expect(kept.line).toBe('e1');
+    expect(run([{ type: 'open', level: 'a' }, { type: 'selectLine', id: 'e1' }, { type: 'up' }], lined).line).toBeNull();
+  });
+
   it('clears the selection when the level changes', () => {
     const s = run([
       { type: 'select', id: 'overview-node' },
@@ -150,6 +184,7 @@ describe('restoreNav', () => {
       cursor: 1,
       selected: 'a-node',
       details: true,
+      line: null,
     });
     expect(restoreNav({ history: ['overview'], cursor: 0 })).toEqual(initialNav());
   });

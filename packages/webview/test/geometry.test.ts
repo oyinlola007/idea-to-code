@@ -238,10 +238,13 @@ describe('metrics', () => {
     expect(long.height).toBeGreaterThan(short.height);
   });
 
-  it('stacks a label and a data chip', () => {
-    const both = edgeLabelBox({ id: 'e', from: 'a', to: 'b', label: 'yes', data: 'booking' }, approxMeasure);
-    const one = edgeLabelBox({ id: 'e', from: 'a', to: 'b', label: 'yes' }, approxMeasure);
-    expect(both?.height).toBeGreaterThan(one?.height ?? 0);
+  it('sizes a label for its name alone; the data shows only when the line is picked', () => {
+    const both = edgeLabelBox({ id: 'e', from: 'a', to: 'b', label: 'yes', data: 'a much longer booking record' }, approxMeasure);
+    const name = edgeLabelBox({ id: 'e', from: 'a', to: 'b', label: 'yes' }, approxMeasure);
+    expect(both).toMatchObject({ width: name?.width, height: name?.height, label: 'yes' });
+    expect(both?.data).toBe('a much longer booking record');
+    const data = edgeLabelBox({ id: 'e', from: 'a', to: 'b', data: 'booking' }, approxMeasure);
+    expect(data?.height).toBe(name?.height);
     expect(edgeLabelBox({ id: 'e', from: 'a', to: 'b' }, approxMeasure)).toBeNull();
   });
 });

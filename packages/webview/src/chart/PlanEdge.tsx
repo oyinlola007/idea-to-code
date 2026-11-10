@@ -1,5 +1,6 @@
-// Edges follow ELK's orthogonal route with rounded corners. The branch label
-// and the data chip sit on the middle of the longest segment (ITC-2).
+// Edges follow ELK's orthogonal route with rounded corners. The label sits on the
+// line (ITC-2): its name, or its data when it has no name. A line with both shows
+// its data below the name only while that line is picked out.
 import { BaseEdge, EdgeLabelRenderer, type Edge, type EdgeProps } from '@xyflow/react';
 import { memo } from 'react';
 import { labelPoint, roundedPath, type Point } from '../layout/geometry.js';
@@ -10,6 +11,10 @@ export interface PlanEdgeData extends Record<string, unknown> {
   label: EdgeLabelBox | null;
   labelAt: Point | null;
   emphasis: 'none' | 'active' | 'dim';
+  /** This line is the one picked out. */
+  picked: boolean;
+  /** Picks this line out; its label picks it too. */
+  onSelect?: (id: string) => void;
 }
 export type PlanFlowEdge = Edge<PlanEdgeData, 'plan'>;
 
@@ -23,12 +28,16 @@ export const PlanEdge = memo(function PlanEdge({ id, data }: EdgeProps<PlanFlowE
       {data.label && (
         <EdgeLabelRenderer>
           <div
-            className={`edge-label edge-label--${data.emphasis}`}
+            className={`edge-label edge-label--${data.emphasis}${data.picked ? ' edge-label--picked' : ''}`}
             style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)`, width: data.label.width }}
+            onClick={(event) => {
+              event.stopPropagation();
+              data.onSelect?.(id);
+            }}
           >
             {data.label.label && <span className="edge-label__branch">{data.label.label}</span>}
-            {data.label.data && (
-              <span className="edge-label__data" title={data.label.data}>
+            {data.label.data && (!data.label.label || data.picked) && (
+              <span className={`edge-label__data${data.label.label ? ' edge-label__data--below' : ''}`} title={data.label.data}>
                 <span className="codicon codicon-package" aria-hidden="true" />
                 {data.label.data}
               </span>

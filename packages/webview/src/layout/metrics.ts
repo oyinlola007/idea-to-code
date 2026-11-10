@@ -93,6 +93,10 @@ export function nodeBox(n: VNode, measure: Measure): NodeBox {
   return { width, height, title, body, hasMeta: meta };
 }
 
+/**
+ * A line's label, sized for what shows at rest: its name, or its data when it has no name.
+ * A line with both shows its data only when it's picked out, below the name.
+ */
 export interface EdgeLabelBox {
   width: number;
   height: number;
@@ -111,12 +115,12 @@ export function edgeLabelBox(e: VEdge, measure: Measure): EdgeLabelBox | null {
   if (!e.label && !e.data) return null;
   const inner = M.edgeLabel.maxWidth - M.edgeLabel.padX * 2;
   const label = e.label ? clampText(e.label, 'meta', inner, measure) : undefined;
-  const data = e.data ? clampText(e.data, 'mono', inner - 14, measure) : undefined;
-  const widths = [label ? measure(label, 'meta') : 0, data ? measure(data, 'mono') + 14 : 0];
-  const rows = (label ? 1 : 0) + (data ? 1 : 0);
+  // Shown at rest only without a name, so only then is it cut to fit; picked out, it's shown in full.
+  const data = e.data ? (label ? e.data : clampText(e.data, 'mono', inner - 14, measure)) : undefined;
+  const shown = label ? measure(label, 'meta') : measure(data ?? '', 'mono') + 14;
   return {
-    width: Math.ceil(Math.max(...widths) + M.edgeLabel.padX * 2),
-    height: rows * M.edgeLabel.height + (rows - 1) * M.edgeLabel.gap,
+    width: Math.ceil(shown + M.edgeLabel.padX * 2),
+    height: M.edgeLabel.height,
     ...(label ? { label } : {}),
     ...(data ? { data } : {}),
   };

@@ -420,7 +420,7 @@ function Viewer({
       } else if (event.key === 'Escape') {
         event.preventDefault();
         if (historyPanel) onHistoryPanel(null);
-        else if (nav.details || nav.selected !== null) dispatch({ type: 'escape' });
+        else if (nav.details || nav.selected !== null || nav.line !== null) dispatch({ type: 'escape' });
         else if (parent !== null) void goOut(parent);
       } else if (event.key === 'Enter' && selectedNode && !(event.target instanceof HTMLButtonElement)) {
         event.preventDefault();
@@ -467,6 +467,13 @@ function Viewer({
       }
       onHistoryPanel(null);
       dispatch({ type: 'select', id });
+    },
+    [dispatch, onHistoryPanel],
+  );
+  const onSelectLine = useCallback(
+    (id: string) => {
+      onHistoryPanel(null);
+      dispatch({ type: 'selectLine', id });
     },
     [dispatch, onHistoryPanel],
   );
@@ -574,10 +581,12 @@ function Viewer({
           layouter={layouter}
           measure={measure}
           selected={selectedNode?.id ?? null}
+          line={nav.line}
           panelOpen={nav.details || historyPanel !== null}
           emptyText={emptyText(model, level, trusted)}
           entry={entry}
           onSelect={onSelect}
+          onSelectLine={onSelectLine}
           onOpen={onOpen}
           onRendered={onRendered}
           onError={onError}

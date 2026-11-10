@@ -51,11 +51,14 @@ interface Props {
   layouter: Layouter;
   measure: Measure;
   selected: string | null;
+  /** The line picked out, with the cards at its ends. */
+  line: string | null;
   /** The details panel is open over the right edge of the canvas. */
   panelOpen: boolean;
   emptyText: string;
   entry: Entry;
   onSelect: (id: string | null) => void;
+  onSelectLine: (id: string) => void;
   onOpen: (node: VNode) => void;
   onRendered: (info: RenderInfo) => void;
   onError: (message: string) => void;
@@ -78,7 +81,22 @@ const sleep = (ms: number) =>
   });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
-  const { level, version, layouter, measure, selected, panelOpen, emptyText, entry, onSelect, onOpen, onRendered, onError } = props;
+  const {
+    level,
+    version,
+    layouter,
+    measure,
+    selected,
+    line,
+    panelOpen,
+    emptyText,
+    entry,
+    onSelect,
+    onSelectLine,
+    onOpen,
+    onRendered,
+    onError,
+  } = props;
   const flow = useReactFlow<PlanFlowNode, PlanFlowEdge>();
   const wrapper = useRef<HTMLDivElement>(null);
   const cache = useRef(new Map<string, Timed>());
@@ -341,7 +359,13 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
     [key],
   );
 
+  // What stays lit: a selected card and its neighbours, or a selected line's two ends.
+  const lineEnds = useMemo(() => {
+    const e = line === null ? undefined : level.edges.find((x) => x.id === line);
+    return e ? new Set([e.from, e.to]) : null;
+  }, [line, level.edges]);
   const neighbours = useMemo(() => {
+    if (lineEnds) return lineEnds;
     if (!selected) return null;
     const set = new Set([selected]);
     for (const e of level.edges) {
@@ -349,7 +373,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
       if (e.to === selected) set.add(e.from);
     }
     return set;
-  }, [selected, level.edges]);
+  }, [selected, lineEnds, level.edges]);
 
   // While the same level is laid out again, the old chart stays up instead of a blank flash.
   const current = placed?.key === key || placed?.levelId === level.id ? placed.placed : null;
@@ -374,13 +398,14 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
             node,
             box: p.box,
             dimmed: neighbours !== null && !neighbours.has(p.id),
+            lineEnd: lineEnds?.has(p.id) === true,
             ring: ringed?.ids.includes(p.id) === true ? ringed.kind : null,
             onOpen,
           },
         },
       ];
     });
-  }, [current, level.nodes, selected, neighbours, ringed, onOpen]);
+  }, [current, level.nodes, selected, neighbours, lineEnds, ringed, onOpen]);
 
   const edges = useMemo<PlanFlowEdge[]>(() => {
     if (!current) return [];
@@ -395,10 +420,25 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
         points: e.points,
         label: e.label,
         labelAt: e.labelAt,
-        emphasis: !selected ? 'none' : e.from === selected || e.to === selected ? 'active' : 'dim',
+        emphasis: lineEnds
+          ? e.id === line
+            ? 'active'
+            : 'dim'
+          : !selected
+            ? 'none'
+            : e.from === selected || e.to === selected
+              ? 'active'
+              : 'dim',
+        picked: e.id === line,
+        onSelect: onSelectLine,
       },
     }));
-  }, [current, selected]);
+  }, [current, selected, line, lineEnds, onSelectLine]);
+  // The picked line is drawn last, over the other lines but still under every label.
+  const drawn = useMemo(
+    () => (line === null ? edges : [...edges.filter((e) => e.id !== line), ...edges.filter((e) => e.id === line)]),
+    [edges, line],
+  );
 
   const pad = 480;
   const extent: [[number, number], [number, number]] | undefined = current
@@ -413,7 +453,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
       <EdgeMarkers />
       <ReactFlow<PlanFlowNode, PlanFlowEdge>
         nodes={nodes}
-        edges={edges}
+        edges={drawn}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable={false}
@@ -446,6 +486,10 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(props, ref) {
           pendingClick.current = setTimeout(() => {
             onSelect(n.id);
           }, DOUBLE_CLICK_MS);
+        }}
+        onEdgeClick={(_, e) => {
+          clearTimeout(pendingClick.current);
+          onSelectLine(e.id);
         }}
         onNodeDoubleClick={(_, n) => {
           clearTimeout(pendingClick.current);

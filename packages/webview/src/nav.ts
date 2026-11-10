@@ -1,6 +1,6 @@
 // Navigation through levels as a pure reducer: an in-tab history (a webview
-// has no address bar), the selection, and the Esc order, which a click on the
-// chart's background follows too, short of leaving the level.
+// has no address bar), the selection (a card or a line, one at a time), and the
+// Esc order, which a click on the chart's background follows too, short of leaving the level.
 import { OVERVIEW, type LevelId, type ViewModel } from '@idea-to-code/core';
 
 export interface NavState {
@@ -8,6 +8,8 @@ export interface NavState {
   cursor: number;
   selected: string | null;
   details: boolean;
+  /** A line picked out on the chart, with the cards at its ends. Not saved with the tab. */
+  line: string | null;
 }
 
 export type NavAction =
@@ -16,22 +18,29 @@ export type NavAction =
   | { type: 'back' }
   | { type: 'forward' }
   | { type: 'select'; id: string | null }
+  | { type: 'selectLine'; id: string }
   | { type: 'closeDetails' }
   /** A click on the chart's background: like the panel's close button, then clearing the selection. */
   | { type: 'clickAway' }
   | { type: 'escape' }
   | { type: 'reconcile' };
 
-export const initialNav = (level: LevelId = OVERVIEW): NavState => ({ history: [level], cursor: 0, selected: null, details: false });
+export const initialNav = (level: LevelId = OVERVIEW): NavState => ({
+  history: [level],
+  cursor: 0,
+  selected: null,
+  details: false,
+  line: null,
+});
 
 export const currentLevel = (s: NavState): LevelId => s.history[s.cursor] ?? OVERVIEW;
 export const canBack = (s: NavState) => s.cursor > 0;
 export const canForward = (s: NavState) => s.cursor < s.history.length - 1;
 
 function push(s: NavState, level: LevelId): NavState {
-  if (level === currentLevel(s)) return { ...s, selected: null, details: false };
+  if (level === currentLevel(s)) return { ...s, selected: null, details: false, line: null };
   const history = [...s.history.slice(0, s.cursor + 1), level];
-  return { history, cursor: history.length - 1, selected: null, details: false };
+  return { history, cursor: history.length - 1, selected: null, details: false, line: null };
 }
 
 /** The nearest level that still exists, walking up the old crumbs. */
@@ -51,7 +60,7 @@ export function restoreNav(saved: unknown): NavState | undefined {
   if (!Array.isArray(history) || history.length === 0 || !history.every((id) => typeof id === 'string')) return undefined;
   if (typeof cursor !== 'number' || !Number.isInteger(cursor) || cursor < 0 || cursor >= history.length) return undefined;
   const id = typeof selected === 'string' ? selected : null;
-  return { history: history, cursor, selected: id, details: id !== null };
+  return { history: history, cursor, selected: id, details: id !== null, line: null };
 }
 
 export function navReducer(model: ViewModel, before?: ViewModel) {
@@ -64,18 +73,22 @@ export function navReducer(model: ViewModel, before?: ViewModel) {
         return parent ? push(s, parent) : s;
       }
       case 'back':
-        return canBack(s) ? { ...s, cursor: s.cursor - 1, selected: null, details: false } : s;
+        return canBack(s) ? { ...s, cursor: s.cursor - 1, selected: null, details: false, line: null } : s;
       case 'forward':
-        return canForward(s) ? { ...s, cursor: s.cursor + 1, selected: null, details: false } : s;
+        return canForward(s) ? { ...s, cursor: s.cursor + 1, selected: null, details: false, line: null } : s;
       case 'select':
-        return { ...s, selected: a.id, details: a.id !== null };
+        return { ...s, selected: a.id, details: a.id !== null, line: null };
+      case 'selectLine':
+        return { ...s, selected: null, details: false, line: a.id };
       case 'closeDetails':
         return { ...s, details: false };
       case 'clickAway':
         if (s.details) return { ...s, details: false };
+        if (s.line !== null) return { ...s, line: null };
         return s.selected === null ? s : { ...s, selected: null };
       case 'escape':
         if (s.details) return { ...s, details: false };
+        if (s.line !== null) return { ...s, line: null };
         if (s.selected) return { ...s, selected: null };
         return navReducer(model, before)(s, { type: 'up' });
       case 'reconcile': {
@@ -91,7 +104,8 @@ export function navReducer(model: ViewModel, before?: ViewModel) {
           }
         });
         const selected = s.selected && model.levels[level]?.nodes.some((n) => n.id === s.selected) ? s.selected : null;
-        return { history, cursor, selected, details: s.details && selected !== null };
+        const line = s.line !== null && model.levels[level]?.edges.some((e) => e.id === s.line) ? s.line : null;
+        return { history, cursor, selected, details: s.details && selected !== null, line };
       }
     }
   };
