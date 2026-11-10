@@ -615,8 +615,10 @@ button.crumbs__more[aria-expanded='true'] {
   border-style: dashed;
   box-shadow: none;
 }
-.card--planned {
-  background: transparent;
+/* A dashed card has no shadow to outline it: its fill and border have to carry it, in light themes too. */
+.card--planned,
+.card--reference {
+  border-color: var(--itc-border-strong);
 }
 .card--planned .card__title,
 .card--planned .card__body {

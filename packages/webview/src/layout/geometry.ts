@@ -3,7 +3,7 @@
 // and the viewport rules (fit the width, never zoom in, start at the top; the
 // zoom buttons' steps and the reading view they come back to).
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api.js';
-import type { Level } from '@idea-to-code/core';
+import { OVERVIEW, type Level } from '@idea-to-code/core';
 import { edgeLabelBox, nodeBox, type EdgeLabelBox, type Measure, type NodeBox } from './metrics.js';
 
 export interface Point {
@@ -60,19 +60,44 @@ export const LAYOUT_OPTIONS: Record<string, string> = {
   'elk.layered.layering.strategy': 'COFFMAN_GRAHAM',
   'elk.layered.layering.coffmanGraham.layerBound': '2',
   'elk.edgeLabels.placement': 'CENTER',
+  // Parts of the chart with no line between them (often shared components) are laid
+  // out apart, then packed. Aiming for a tall shape wraps them into rows no wider
+  // than the main chart, instead of lining them up beside it.
+  'elk.aspectRatio': '0.6',
+  // Those parts follow the plan's order, so the first feature stays at the top.
+  'elk.layered.considerModelOrder.components': 'MODEL_ORDER',
   'elk.padding': '[top=8,left=8,bottom=8,right=8]',
 };
+
+/**
+ * On the overview, cards with no lines are set apart from the chart: shared components
+ * in a grid above it, features in a grid below it, each grid in cards of one size.
+ * Inside a feature, every card stays in its flow.
+ */
+function looseOnOverview(level: Level): { infra: string[]; features: string[] } {
+  if (level.id !== OVERVIEW) return { infra: [], features: [] };
+  const linked = new Set(level.edges.flatMap((e) => [e.from, e.to]));
+  const loose = level.nodes.filter((n) => !linked.has(n.id));
+  return {
+    infra: loose.filter((n) => n.kind === 'component').map((n) => n.id),
+    features: loose.filter((n) => n.kind === 'feature').map((n) => n.id),
+  };
+}
 
 export function toElkGraph(
   level: Level,
   measure: Measure,
 ): { graph: ElkNode; boxes: Map<string, NodeBox>; labels: Map<string, EdgeLabelBox | null> } {
   const boxes = new Map<string, NodeBox>();
-  const children = level.nodes.map((n) => {
-    const box = nodeBox(n, measure);
-    boxes.set(n.id, box);
-    return { id: n.id, width: box.width, height: box.height };
-  });
+  for (const n of level.nodes) boxes.set(n.id, nodeBox(n, measure));
+  const { infra, features } = looseOnOverview(level);
+  const apart = new Set([...infra, ...features]);
+  const children = level.nodes
+    .filter((n) => !apart.has(n.id))
+    .map((n) => {
+      const box = boxes.get(n.id) ?? nodeBox(n, measure);
+      return { id: n.id, width: box.width, height: box.height };
+    });
   const labels = new Map(level.edges.map((e) => [e.id, edgeLabelBox(e, measure)]));
   const graph: ElkNode = {
     id: `root:${level.id}`,
@@ -111,9 +136,66 @@ export function fromElk(result: ElkNode, boxes: Map<string, NodeBox>, labels: Ma
     }
     return [{ id: e.id, from: v.from, to: v.to, points, label: labels.get(e.id) ?? null, labelAt: null, labelCost: 0 }];
   });
-  const placed = { width: Math.ceil(result.width ?? 0), height: Math.ceil(result.height ?? 0), nodes, edges };
+  const placed = withGrids({ width: Math.ceil(result.width ?? 0), height: Math.ceil(result.height ?? 0), nodes, edges }, boxes, level);
   placeLabels(placed);
   return placed;
+}
+
+/** Space between grid cards, and between the grids and the chart. */
+export const GRID_GAP = { card: 28, section: 56 };
+const PAD = 8;
+/** A grid of loose cards wraps at the chart's width, or this, whichever is wider. */
+const GRID_MAX = 960;
+
+/** Cards in rows of one size, `width` wide at most. */
+function grid(ids: string[], boxes: Map<string, NodeBox>, width: number): { nodes: PlacedNode[]; width: number; height: number } {
+  const cards = ids.flatMap((id) => {
+    const box = boxes.get(id);
+    return box ? [{ id, box }] : [];
+  });
+  if (cards.length === 0) return { nodes: [], width: 0, height: 0 };
+  const w = Math.max(...cards.map((c) => c.box.width));
+  const h = Math.max(...cards.map((c) => c.box.height));
+  const columns = Math.max(1, Math.min(cards.length, Math.floor((width + GRID_GAP.card) / (w + GRID_GAP.card))));
+  const rows = Math.ceil(cards.length / columns);
+  return {
+    nodes: cards.map(({ id, box }, i) => ({
+      id,
+      x: (i % columns) * (w + GRID_GAP.card),
+      y: Math.floor(i / columns) * (h + GRID_GAP.card),
+      box: { ...box, width: w, height: h },
+    })),
+    width: columns * w + (columns - 1) * GRID_GAP.card,
+    height: rows * h + (rows - 1) * GRID_GAP.card,
+  };
+}
+
+/** The overview's loose cards: infrastructure above the chart, features below it, each block centred. */
+function withGrids(chart: Placed, boxes: Map<string, NodeBox>, level: Level): Placed {
+  const { infra, features } = looseOnOverview(level);
+  if (infra.length === 0 && features.length === 0) return chart;
+  const hasChart = chart.nodes.length > 0;
+  const inner = hasChart ? chart.width - PAD * 2 : 0;
+  const wrapAt = Math.max(inner, GRID_MAX - PAD * 2);
+  const top = grid(infra, boxes, wrapAt);
+  const bottom = grid(features, boxes, wrapAt);
+  const width = Math.max(inner, top.width, bottom.width);
+  const blocks: { nodes: PlacedNode[]; edges: PlacedEdge[]; width: number; height: number; x0: number; y0: number }[] = [];
+  if (top.nodes.length) blocks.push({ ...top, edges: [], x0: 0, y0: 0 });
+  if (hasChart) blocks.push({ nodes: chart.nodes, edges: chart.edges, width: inner, height: chart.height - PAD * 2, x0: PAD, y0: PAD });
+  if (bottom.nodes.length) blocks.push({ ...bottom, edges: [], x0: 0, y0: 0 });
+  const nodes: PlacedNode[] = [];
+  const edges: PlacedEdge[] = [];
+  let y = PAD;
+  for (const b of blocks) {
+    // Moves a block from where it was laid out to its place in the column, centred.
+    const dx = PAD + (width - b.width) / 2 - b.x0;
+    const dy = y - b.y0;
+    for (const n of b.nodes) nodes.push({ ...n, x: n.x + dx, y: n.y + dy });
+    for (const e of b.edges) edges.push({ ...e, points: e.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) });
+    y += b.height + GRID_GAP.section;
+  }
+  return { width: Math.ceil(width + PAD * 2), height: Math.ceil(y - GRID_GAP.section + PAD), nodes, edges };
 }
 
 interface Rect {

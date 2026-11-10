@@ -118,6 +118,29 @@ describe('a busy overview', () => {
     expect(labelCollisions(laid)).toBe(0);
     expect(edgesThroughNodes(laid)).toBe(0);
   });
+
+  it('groups loose infrastructure above the chart and loose features below it, in cards of one size, within the width', async () => {
+    const busy = buildViewModel(loadFromTexts({ 'plan/map.yaml': busyMap }));
+    const level = busy.levels.overview;
+    if (!level) throw new Error('no overview');
+    const { graph, boxes, labels } = toElkGraph(level, approxMeasure);
+    const laid = fromElk(await elk.layout(graph), boxes, labels, level);
+    // Twelve components with no lines used to line up beside the chart, more than doubling its width.
+    expect(laid.width).toBeLessThanOrEqual(960);
+    const kinds = new Map(level.nodes.map((n) => [n.id, n.kind]));
+    const infra = laid.nodes.filter((n) => kinds.get(n.id) === 'component');
+    const features = laid.nodes.filter((n) => kinds.get(n.id) === 'feature');
+    expect(Math.max(...infra.map((n) => n.y + n.box.height))).toBeLessThan(Math.min(...features.map((n) => n.y)));
+    expect(new Set(infra.map((n) => `${String(n.box.width)}x${String(n.box.height)}`)).size).toBe(1);
+    // Newsletters and Events have no lines: they come after the chart, the same size as each other.
+    const loose = features.filter((n) => n.id === 'newsletters' || n.id === 'events');
+    const chart = features.filter((n) => n.id !== 'newsletters' && n.id !== 'events');
+    expect(Math.min(...loose.map((n) => n.y))).toBeGreaterThan(Math.max(...chart.map((n) => n.y + n.box.height)));
+    expect(new Set(loose.map((n) => `${String(n.box.width)}x${String(n.box.height)}`)).size).toBe(1);
+    expect(labelCrossings(laid)).toBe(0);
+    expect(labelCollisions(laid)).toBe(0);
+    expect(edgesThroughNodes(laid)).toBe(0);
+  });
 });
 
 describe('Toolshed layout', () => {
@@ -152,11 +175,15 @@ describe('Toolshed layout', () => {
     }
   });
 
-  it('puts the first listed feature at the top of the overview', () => {
+  it('puts infrastructure with no lines above the chart, and the first listed feature at the top of the chart', () => {
     const overview = placed.get('overview');
-    const top = Math.min(...(overview?.nodes.map((n) => n.y) ?? []));
+    const kinds = new Map(model.levels.overview?.nodes.map((n) => [n.id, n.kind]));
+    const features = overview?.nodes.filter((n) => kinds.get(n.id) === 'feature') ?? [];
     const first = model.levels.overview?.nodes[0]?.id;
-    expect(overview?.nodes.find((n) => n.id === first)?.y).toBe(top);
+    expect(features.find((n) => n.id === first)?.y).toBe(Math.min(...features.map((n) => n.y)));
+    // The app database has no lines on Toolshed's overview.
+    const db = overview?.nodes.find((n) => n.id === 'app-db');
+    expect(db?.y).toBeLessThan(Math.min(...features.map((n) => n.y)));
   });
 
   it('gives every edge a polyline and keeps its label', () => {
