@@ -1,5 +1,5 @@
 // The idea-to-code extension: wires the plan host to the views, tabs and commands.
-import type { SettingsTab } from '@idea-to-code/core';
+import { SettingsTab } from '@idea-to-code/core';
 import * as vscode from 'vscode';
 import { AppPanel } from './appPanel.js';
 import { ChatService } from './chat/chatService.js';
@@ -102,7 +102,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.commands.registerCommand('ideaToCode.showHistory', (session?: string) => {
       app.showHistory(session);
     }),
-    vscode.commands.registerCommand('ideaToCode.openSettings', (tab?: SettingsTab) => chat.showSettings(tab)),
+    // From a menu, VS Code passes its own argument: only a real tab name counts.
+    vscode.commands.registerCommand('ideaToCode.openSettings', (tab?: unknown) => chat.showSettings(SettingsTab.safeParse(tab).data)),
     vscode.commands.registerCommand('ideaToCode.initPlan', async () => {
       await initPlan(host, trust);
       if (host.state.kind === 'plan') app.show();

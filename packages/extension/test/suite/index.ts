@@ -293,6 +293,12 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     await closeAll();
   });
 
+  await step('Settings opens from a menu, whatever argument the menu passes', async () => {
+    await vscode.commands.executeCommand('ideaToCode.openSettings', { viewId: 'ideaToCode.chat' });
+    await vscode.commands.executeCommand('ideaToCode.openSettings', 'chart');
+    await vscode.commands.executeCommand('ideaToCode.openSettings', 'models');
+  });
+
   await step('a folder called plan with no real plan quietly opens as text', async () => {
     await mkdir(join(root, 'notes', 'plan', 'features'), { recursive: true });
     const strayPath = join(root, 'notes', 'plan', 'map.yaml');
