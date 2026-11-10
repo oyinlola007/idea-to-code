@@ -1,4 +1,4 @@
-// plan/GUIDE.md and the plan skill: what any coding agent or person reads to
+// plan/GUIDE.md: what any coding agent or person reads to
 // update a plan correctly. Node fields, status values and tool names come from
 // the code, so they can't drift. The wording was proven in the ITC-2 agent runs.
 import { Document } from 'yaml';
@@ -191,24 +191,4 @@ The app and the MCP tools validate every plan and report the file, line and reas
 /** The map.yaml of a brand-new plan. */
 export function newPlanMap(project: string): string {
   return new Document({ project, features: [] }).toString();
-}
-
-export function generateSkill(marker: string): string {
-  return `---
-name: plan
-description: Read and update this project's plan in plan/ (features, flows, components, progress). Use whenever the user asks to plan a feature, add or change steps or flows, add detail under a step, mark work done or in progress, connect features, or asks what is planned, done or next.
----
-
-${marker}
-
-# Project plan
-
-The project's plan lives in \`plan/\` as YAML: \`plan/map.yaml\` (the overview) and \`plan/features/*.yaml\` (one file per feature, with flows you can drill into).
-
-1. Read \`plan/GUIDE.md\` before changing anything. It defines the format and its rules.
-2. If the idea-to-code MCP tools are available, use them. Otherwise edit only the YAML files in \`plan/\`.
-3. Never change an existing \`id\`; change \`label\` to rename.
-4. Keep changes small and focused on what was asked.
-5. Before finishing, check the files you changed against every rule in the guide's **Rules** section.
-`;
 }

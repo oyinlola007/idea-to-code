@@ -2,18 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { checkProjectPath, UnsafePathError } from '../src/paths.js';
 
 describe('checkProjectPath', () => {
-  it('allows the plan folder and the connector files', () => {
-    for (const ok of [
-      'plan/map.yaml',
-      'plan/features/bookings.yaml',
-      'plan/GUIDE.md',
-      'AGENTS.md',
-      '.claude/skills/plan/SKILL.md',
-      '.github/copilot-instructions.md',
-      '.cursor/rules/plan.mdc',
-      '.mcp.json',
-      '.cursor/mcp.json',
-    ]) {
+  it('allows the plan folder', () => {
+    for (const ok of ['plan/map.yaml', 'plan/features/bookings.yaml', 'plan/GUIDE.md']) {
       expect(() => {
         checkProjectPath(ok);
       }, ok).not.toThrow();
@@ -29,6 +19,9 @@ describe('checkProjectPath', () => {
       'C:/Windows/x',
       'plan\\..\\x',
       'src/index.ts',
+      'AGENTS.md',
+      '.mcp.json',
+      '.claude/skills/plan/SKILL.md',
       'package.json',
       '.env',
       'plan//x',

@@ -1,13 +1,21 @@
 // PlanFiles on VS Code's file API, so remote and virtual workspaces work too.
 // Exercised inside a real editor from ITC-9 on.
-import { checkProjectPath, UnsafePathError, type PlanFiles } from '@idea-to-code/store';
+import { checkProjectPath, NodePlanFiles, UnsafePathError, type PlanFiles } from '@idea-to-code/store';
 import * as vscode from 'vscode';
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 export class VsCodePlanFiles implements PlanFiles {
-  constructor(private readonly root: vscode.Uri) {}
+  /**
+   * Local files are written with Node, whose rename replaces a file in one step. VS Code's
+   * rename deletes the old file first, so a reader in between would find no plan at all.
+   */
+  private readonly local: NodePlanFiles | undefined;
+
+  constructor(private readonly root: vscode.Uri) {
+    this.local = root.scheme === 'file' ? new NodePlanFiles(root.fsPath) : undefined;
+  }
 
   private uri(path: string): vscode.Uri {
     return vscode.Uri.joinPath(this.root, ...path.split('/'));
@@ -53,6 +61,7 @@ export class VsCodePlanFiles implements PlanFiles {
   async write(path: string, content: string): Promise<void> {
     checkProjectPath(path);
     await this.checkNoSymlinks(path);
+    if (this.local) return this.local.write(path, content);
     const target = this.uri(path);
     const temp = this.uri(`${path}.tmp-${crypto.randomUUID()}`);
     await vscode.workspace.fs.writeFile(temp, encoder.encode(content));

@@ -380,6 +380,20 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     check((await files.read('plan/features/scratch.yaml')) === null, 'not removed');
   });
 
+  await step('VsCodePlanFiles: a reader never finds a file missing while it is rewritten', async () => {
+    await files.write('plan/features/scratch.yaml', 'x: 0\n');
+    const writes = { done: false };
+    let missing = 0;
+    const reading = (async () => {
+      while (!writes.done) if ((await files.read('plan/features/scratch.yaml')) === null) missing++;
+    })();
+    for (let i = 1; i <= 100; i++) await files.write('plan/features/scratch.yaml', `x: ${String(i)}\n`);
+    writes.done = true;
+    await reading;
+    await files.remove('plan/features/scratch.yaml');
+    check(missing === 0, `missing ${String(missing)} times`);
+  });
+
   await step('VsCodePlanFiles: refuses paths outside the plan and symlinks', async () => {
     const refused = async (path: string) => {
       const outcome = await files.write(path, 'x').then(
@@ -394,20 +408,6 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     await symlink(join(root, 'elsewhere'), join(root, 'plan', 'linked'));
     await refused('plan/linked/x.yaml');
     check(!(await exists(join(root, 'elsewhere', 'x.yaml'))), 'written through the link');
-  });
-
-  await step('connectors write and remove through the editor', async () => {
-    const service = api.host.service;
-    check(service !== undefined, 'no service');
-    await writeFile(join(root, 'AGENTS.md'), '# Rules\n');
-    await service?.setConnector('agents-md', true);
-    check((await readFile(join(root, 'AGENTS.md'), 'utf8')).includes('plan/GUIDE.md'), 'not added');
-    await service?.setConnector('agents-md', false);
-    check((await readFile(join(root, 'AGENTS.md'), 'utf8')) === '# Rules\n', 'not restored');
-    await service?.setConnector('cursor-rule', true);
-    check(await exists(join(root, '.cursor', 'rules', 'plan.mdc')), 'rule not added');
-    await service?.setConnector('cursor-rule', false);
-    check(!(await exists(join(root, '.cursor', 'rules', 'plan.mdc'))), 'rule not removed');
   });
 
   await step('the chat sidebar opens with no page errors', async () => {
@@ -500,14 +500,13 @@ async function emptyScenario(api: ExtensionApi, root: string): Promise<void> {
     await closeAll();
   });
 
-  await step('Initialize creates the map, the guide and the chosen connector, then records history', async () => {
+  await step('Initialize creates the map and the guide, only inside plan/, then records history', async () => {
     const rendered = nextRender(api, (r) => r.kind === 'plan');
-    await vscode.commands.executeCommand('ideaToCode.initPlan', { connectors: ['claude-skill'] });
+    await vscode.commands.executeCommand('ideaToCode.initPlan');
     await rendered;
     check((await readFile(join(root, 'plan', 'map.yaml'), 'utf8')).includes('project: toolshed'), 'no map');
     check(await exists(join(root, 'plan', 'GUIDE.md')), 'no guide');
-    check(await exists(join(root, '.claude', 'skills', 'plan', 'SKILL.md')), 'no skill');
-    check(!(await exists(join(root, 'AGENTS.md'))), 'unasked connector');
+    check((await readdir(root)).join() === 'plan', `wrote outside plan/: ${(await readdir(root)).join(', ')}`);
     const state = planState(api);
     check(
       state.plan.problems.every((p) => p.severity !== 'error'),
@@ -519,7 +518,7 @@ async function emptyScenario(api: ExtensionApi, root: string): Promise<void> {
   await step('Initialize again changes nothing in the plan', async () => {
     const map = join(root, 'plan', 'map.yaml');
     await writeFile(map, 'project: Renamed\nfeatures: []\n');
-    await vscode.commands.executeCommand('ideaToCode.initPlan', { connectors: ['claude-skill'] });
+    await vscode.commands.executeCommand('ideaToCode.initPlan');
     check((await readFile(map, 'utf8')) === 'project: Renamed\nfeatures: []\n', 'overwrote the plan');
   });
 }
@@ -575,7 +574,7 @@ async function restrictedScenario(api: ExtensionApi, rootUri: vscode.Uri, root: 
 
   await step('Initialize refuses, even when called directly', async () => {
     const before = await readdir(root);
-    await vscode.commands.executeCommand('ideaToCode.initPlan', { connectors: ['claude-skill'] }).then(
+    await vscode.commands.executeCommand('ideaToCode.initPlan').then(
       () => undefined,
       () => undefined,
     );

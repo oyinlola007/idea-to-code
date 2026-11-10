@@ -9,7 +9,7 @@ import { CHAT_VIEW_ID, ChatViewProvider, pickChat } from './chatView.js';
 import { detectOptionalApis, type OptionalApis } from './detect.js';
 import { exportWebPage } from './exportPage.js';
 import { registerMcpServer } from './mcpServer.js';
-import { initPlan, type InitOptions } from './initPlan.js';
+import { initPlan } from './initPlan.js';
 import { ModelHost } from './models/modelHost.js';
 import { PlanEditor, reopenAsText } from './planEditor.js';
 import { ProjectHost } from './projectHost.js';
@@ -58,6 +58,12 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       reveal: (reveal, bringForward) => {
         app.reveal(reveal, bringForward);
       },
+      // The chart opens beside the chat, so the plan is seen being made.
+      startPlan: async () => {
+        const started = await initPlan(host, trust);
+        if (started) app.show();
+        return started;
+      },
       onDidChange: (listener) => host.onDidChange(listener),
     },
     models: { model: (tier) => models.service.model(tier), onDidChange: (listener) => models.onDidChange(listener) },
@@ -97,8 +103,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       app.showHistory(session);
     }),
     vscode.commands.registerCommand('ideaToCode.openSettings', (tab?: SettingsTab) => chat.showSettings(tab)),
-    vscode.commands.registerCommand('ideaToCode.initPlan', async (options?: InitOptions) => {
-      await initPlan(host, trust, options);
+    vscode.commands.registerCommand('ideaToCode.initPlan', async () => {
+      await initPlan(host, trust);
       if (host.state.kind === 'plan') app.show();
     }),
     vscode.commands.registerCommand('ideaToCode.reopenAsText', (uri?: vscode.Uri) => reopenAsText(uri)),

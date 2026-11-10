@@ -19,6 +19,8 @@ interface Harness {
   reveals: { level: string; ids: string[]; bringForward: boolean }[];
   clock: { now: number };
   refresh(): Promise<void>;
+  /** How many times the chat asked the editor to start a plan. */
+  starts: number[];
 }
 
 const opened: ChatService[] = [];
@@ -27,7 +29,10 @@ afterEach(() => {
 });
 
 /** A chat on a real plan and history, with a fake editor around it. */
-async function harness(models: { large: ModelProvider | ModelError; small?: ModelProvider; sameModel?: boolean }): Promise<Harness> {
+async function harness(
+  models: { large: ModelProvider | ModelError; small?: ModelProvider; sameModel?: boolean },
+  options: { noPlan?: boolean } = {},
+): Promise<Harness> {
   const root = await toolshedFolder();
   const service = await ProjectService.open({
     files: new NodePlanFiles(root),
@@ -40,7 +45,11 @@ async function harness(models: { large: ModelProvider | ModelError; small?: Mode
   const busy: boolean[] = [];
   const previews: (Record<string, string> | null)[] = [];
   const reveals: { level: string; ids: string[]; bringForward: boolean }[] = [];
+  const starts: number[] = [];
+  // A folder without a plan shows as one until the chat starts it.
+  let planned = options.noPlan !== true;
   const refresh = async () => {
+    if (!planned) return;
     const texts = await service.readPlan();
     const history = service.projectHistory;
     state = {
@@ -62,6 +71,12 @@ async function harness(models: { large: ModelProvider | ModelError; small?: Mode
     setPreview: (texts) => previews.push(texts),
     setBusy: (b) => busy.push(b),
     reveal: (reveal, bringForward) => reveals.push({ ...reveal, bringForward }),
+    startPlan: async () => {
+      starts.push(clock.now);
+      planned = true;
+      await refresh();
+      return true;
+    },
     undo: async (latest) => {
       const result = await service.undo({ actor: 'user', expectedLatest: latest });
       await refresh();
@@ -90,7 +105,7 @@ async function harness(models: { large: ModelProvider | ModelError; small?: Mode
   });
   opened.push(chat);
   await chat.start();
-  return { chat, service, root, files, busy, previews, reveals, clock, refresh };
+  return { chat, service, root, files, busy, previews, reveals, clock, refresh, starts };
 }
 
 const fillReminders: Script = {
@@ -105,6 +120,22 @@ const fillReminders: Script = {
 };
 
 const snapshots = async (h: Harness) => (await h.service.projectHistory?.listSnapshots()) ?? [];
+
+describe('the first message', () => {
+  it('starts the plan when there is none, then plans', async () => {
+    const h = await harness({ large: scripted([fillReminders, { text: 'Planned.' }]), sameModel: true }, { noPlan: true });
+    expect(h.chat.view().status).toBe('no-plan');
+    await h.chat.send('A tool-lending app for neighbours');
+    expect(h.starts).toHaveLength(1);
+    expect(h.chat.view().items.map((i) => i.kind)).toEqual(['user', 'assistant', 'assistant', 'changes']);
+  });
+
+  it('never starts a plan that is already there', async () => {
+    const h = await harness({ large: scripted([{ text: 'It has five features.' }]), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    expect(h.starts).toEqual([]);
+  });
+});
 
 describe('a chat turn', () => {
   it('writes once, as one agent version in a chat session, and links it to the message', async () => {

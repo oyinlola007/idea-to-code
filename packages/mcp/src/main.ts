@@ -12,8 +12,9 @@ const USAGE = `Usage: ${serverInfo.name} [--root <folder>]
 
 An MCP server for the idea-to-code plan in plan/. Without --root it uses the
 nearest folder with a plan, from the current folder up to your home folder.
+With no plan yet, a new one goes at the top of the git repository.
 
-  claude mcp add idea-to-code -- npx -y ${serverInfo.name}
+  claude mcp add --scope user idea-to-code -- npx -y ${serverInfo.name}
 `;
 
 function fail(message: string, code: number): never {

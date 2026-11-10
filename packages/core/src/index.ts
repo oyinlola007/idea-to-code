@@ -3,7 +3,6 @@
 export * from './agent.js';
 export * from './bridge.js';
 export * from './codeLinks.js';
-export * from './connectors.js';
 export * from './diff.js';
 export * from './diffSummary.js';
 export { generateGuide, newPlanMap } from './guide.js';

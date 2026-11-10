@@ -42,6 +42,36 @@ describe('finding the project root', () => {
     expect(await findProjectRoot({ start, home: join(base, 'home') })).toEqual({ root: start, found: false });
   });
 
+  it('starts a new plan at the top of the git repository', async () => {
+    const repo = await folder('home', 'app');
+    await mkdir(join(repo, '.git'));
+    const start = await folder('home', 'app', 'packages', 'web');
+    expect(await findProjectRoot({ start, home: join(base, 'home') })).toEqual({ root: repo, found: false });
+  });
+
+  it('takes a .git file as the top too, as in a worktree', async () => {
+    const repo = await folder('home', 'app-worktree');
+    await writeFile(join(repo, '.git'), 'gitdir: ../app/.git/worktrees/x\n');
+    const start = await folder('home', 'app-worktree', 'src');
+    expect(await findProjectRoot({ start, home: join(base, 'home') })).toEqual({ root: repo, found: false });
+  });
+
+  it('prefers an existing plan below the repository top', async () => {
+    const repo = await folder('home', 'mono');
+    await mkdir(join(repo, '.git'));
+    const app = await folder('home', 'mono', 'apps', 'web');
+    await planIn(app);
+    const start = await folder('home', 'mono', 'apps', 'web', 'src');
+    expect(await findProjectRoot({ start, home: join(base, 'home') })).toEqual({ root: app, found: true });
+  });
+
+  it('never takes a repository in the home folder as the top', async () => {
+    const home = await folder('home');
+    await mkdir(join(home, '.git'));
+    const start = await folder('home', 'notes');
+    expect(await findProjectRoot({ start, home })).toEqual({ root: start, found: false });
+  });
+
   it('refuses to start a plan in the home folder', async () => {
     const home = await folder('home');
     expect(await findProjectRoot({ start: home, home })).toEqual({ error: expect.stringContaining('--root') as string });

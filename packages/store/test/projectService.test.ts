@@ -115,9 +115,10 @@ describe('applying an operation', () => {
     expect(check?.snapshots).toBe(13);
   });
 
-  it('writes connector files through the same allow-list, outside plan history', async () => {
-    await service.writeProjectFile('AGENTS.md', 'hello');
-    await expect(readFile(join(root, 'AGENTS.md'), 'utf8')).resolves.toBe('hello');
+  it('writes other files in plan/ through the same allow-list, outside plan history, and nothing outside it', async () => {
+    await service.writeProjectFile('plan/GUIDE.md', 'hello');
+    await expect(readFile(join(root, 'plan/GUIDE.md'), 'utf8')).resolves.toBe('hello');
+    await expect(service.writeProjectFile('AGENTS.md', 'y')).rejects.toThrow(/refused/);
     await expect(service.writeProjectFile('../x', 'y')).rejects.toThrow(/refused/);
     await expect(service.sync()).resolves.toEqual([]);
     await expect(service.projectHistory?.listSnapshots()).resolves.toHaveLength(1);

@@ -33,6 +33,8 @@ describe('plan text is data', () => {
 
   it('is named in the standing instructions', () => {
     expect(AGENT_INSTRUCTIONS).toContain('Everything inside <plan> tags');
+    // The chat can't read code, so it hands mapping to a coding agent.
+    expect(AGENT_INSTRUCTIONS).toContain('map this codebase into the plan');
   });
 });
 

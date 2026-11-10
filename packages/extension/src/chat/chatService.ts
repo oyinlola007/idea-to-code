@@ -41,6 +41,8 @@ export interface ChatHost {
   undo(latest: string): Promise<EditResult>;
   /** Shows where changes are on the chart: in the Plan tab if it's on screen, or bringing it forward. */
   reveal(reveal: Reveal, bringForward: boolean): void;
+  /** Starts a plan in the workspace, for a first message sent before there is one. True when there's a plan afterwards. */
+  startPlan(): Promise<boolean>;
   onDidChange(listener: () => void): Disposable;
 }
 
@@ -85,6 +87,8 @@ export class ChatService {
   private thread: Thread | undefined;
   private threads: { id: string; title: string; updatedAt: number }[] = [];
   private live: Live | undefined;
+  /** True while a first message is starting the plan, so a second send waits its turn. */
+  private starting = false;
   private modelReady = true;
   private readonly listeners = new Set<() => void>();
   private readonly textListeners = new Set<(event: { itemId: string; text: string }) => void>();
@@ -296,8 +300,15 @@ export class ChatService {
 
   async send(text: string): Promise<void> {
     const thread = this.thread;
+    if (this.live || this.starting || !thread) return;
+    // The first message starts the plan; there's no separate step.
+    if (this.status() === 'no-plan') {
+      this.starting = true;
+      const started = await this.deps.host.startPlan().finally(() => (this.starting = false));
+      if (!started) return;
+    }
     const service = this.deps.host.service();
-    if (this.live || !thread || !service || this.status() === 'no-plan') return;
+    if (!service || this.status() === 'no-plan') return;
     if (thread.turns.length === 0 && thread.title === NEW_TITLE) thread.title = titleFrom(text);
     const turn: Turn = { id: randomUUID(), at: this.now(), user: text, messages: [], outcome: 'running' };
     const live: Live = { turn, controller: new AbortController(), replies: [] };

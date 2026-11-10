@@ -1,6 +1,7 @@
 // Which project the server works on: --root if given, otherwise the nearest folder
-// with a plan, from where the agent started it up to the home folder. Some clients
-// start servers in the home folder or at /, where a plan must never be created.
+// with a plan, from where the agent started it up to the home folder. With no plan
+// yet, a new one goes at the top of the git repository, or else where it started.
+// Some clients start servers in the home folder or at /, where a plan must never be created.
 import { realpath, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
@@ -22,6 +23,14 @@ async function hasPlan(folder: string): Promise<boolean> {
   );
 }
 
+/** A .git folder, or a .git file in a worktree or submodule. */
+async function isRepoTop(folder: string): Promise<boolean> {
+  return stat(join(folder, '.git')).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function real(path: string): Promise<string> {
   return realpath(path).catch(() => resolve(path));
 }
@@ -35,10 +44,14 @@ export async function findProjectRoot(options: { start: string; home: string; ro
 
   const start = await real(options.start);
   const home = await real(options.home);
+  let repoTop: string | undefined;
   for (let folder = start; ; folder = dirname(folder)) {
     if (await hasPlan(folder)) return { root: folder, found: true };
-    if (folder === home || dirname(folder) === folder) break;
+    const outside = folder === home || dirname(folder) === folder;
+    if (outside) break;
+    if (repoTop === undefined && (await isRepoTop(folder))) repoTop = folder;
   }
+  if (repoTop !== undefined) return { root: repoTop, found: false };
   if (start === home || dirname(start) === start) return { error: `No plan found from ${start}. ${HINT}` };
   return { root: start, found: false };
 }

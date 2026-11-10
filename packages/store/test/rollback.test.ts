@@ -70,13 +70,11 @@ describe('rollback', () => {
     expect(kept?.files[BOOKINGS]).toContain('# more unrecorded work');
   });
 
-  it("doesn't touch GUIDE.md or the connector files", async () => {
+  it("doesn't touch GUIDE.md", async () => {
     await writeFile(join(root, 'plan/GUIDE.md'), 'guide');
-    await service.writeProjectFile('AGENTS.md', 'agents');
     await service.apply({ name: 'set_status', input: { id: 'join-waitlist', status: 'done' } }, UI);
     await service.rollback(firstId, { actor: 'user' });
     await expect(readFile(join(root, 'plan/GUIDE.md'), 'utf8')).resolves.toBe('guide');
-    await expect(readFile(join(root, 'AGENTS.md'), 'utf8')).resolves.toBe('agents');
   });
 
   it('refuses a version with a damaged stored file, leaving the plan as it is', async () => {

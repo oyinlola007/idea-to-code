@@ -1,5 +1,5 @@
-// The whole journey in one run, from an empty folder: start a plan, the built-in chat
-// plans three levels deep, drill down, mark the deepest step done, an outside agent
+// The whole journey in one run, from an empty folder: the first chat message starts
+// the plan and plans three levels deep, drill down, mark the deepest step done, an outside agent
 // edits through the bundled MCP server, then Undo and restoring an earlier version.
 import type { Reveal } from '@idea-to-code/core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -36,19 +36,19 @@ export async function journeyScenario(api: ExtensionApi, root: string): Promise<
   let server: FakeModelServer | undefined;
   let afterChat: string | undefined;
 
-  await step('1. a plan starts in an empty folder', async () => {
-    await vscode.commands.executeCommand('ideaToCode.initPlan', { connectors: [] });
-    await until('a plan', () => api.host.state.kind === 'plan');
-    check((await snapshots(api)).length === 1, 'no first version');
-  });
-
-  await step('2. the built-in chat plans two features and three levels in one turn', async () => {
+  await step('1-2. the first chat message in an empty folder starts the plan, then plans three levels in one turn', async () => {
     server = await startFakeModelServer(KEY);
     const models = api.host.models.service;
     // One model for both tiers, so no deciding call is made.
     await models.update({ provider: 'custom', baseUrl: server.baseUrl, large: 'fake', small: 'fake' });
     await models.saveKey('custom', KEY);
-    await until('a model', () => api.chat.view().status === 'ready');
+    await until('a model', () =>
+      models.model('large').then(
+        () => true,
+        () => false,
+      ),
+    );
+    check(api.chat.view().status === 'no-plan', `the chat shows ${api.chat.view().status}`);
     const node = (key: string, label: string) => ({ key, type: 'step', label });
     server.script.push(
       {
@@ -94,10 +94,11 @@ export async function journeyScenario(api: ExtensionApi, root: string): Promise<
       },
       { text: 'Bookings is planned three levels deep.' },
     );
-    const before = (await snapshots(api)).length;
     await api.chat.send('Plan bookings with payments');
+    check(api.host.state.kind === 'plan', 'no plan started');
     const after = await snapshots(api);
-    check(after.length === before + 1, `${String(after.length - before)} versions for one turn`);
+    // The plan's first version, then one for the whole turn.
+    check(after.length === 2, `${String(after.length)} versions for a new plan and one turn`);
     check(after.at(-1)?.source === 'agent', `recorded as ${after.at(-1)?.source ?? 'nothing'}`);
     afterChat = after.at(-1)?.id;
     const levels = planState(api).model.levels;

@@ -9,18 +9,24 @@ With this server, Claude Code, Cursor, Copilot or any other MCP client reads and
 **Claude Code**
 
 ```bash
-claude mcp add idea-to-code -- npx -y idea-to-code-mcp
+claude mcp add --scope user idea-to-code -- npx -y idea-to-code-mcp
+```
+
+**Codex**
+
+```bash
+codex mcp add idea-to-code -- npx -y idea-to-code-mcp
 ```
 
 **VS Code**: nothing to do. The idea-to-code extension offers the server to Copilot.
 
-**Cursor**, in `.cursor/mcp.json`:
+**Cursor**, in `~/.cursor/mcp.json`:
 
 ```json
-{ "mcpServers": { "idea-to-code": { "command": "npx", "args": ["-y", "idea-to-code-mcp"] } } }
+{ "mcpServers": { "idea-to-code": { "command": "npx", "args": ["-y", "idea-to-code-mcp", "--root", "${workspaceFolder}"] } } }
 ```
 
-**Any other client**: run `npx -y idea-to-code-mcp` over stdio. The server works on the nearest folder with a `plan/`, from where it starts up to your home folder. To choose the folder yourself, pass `--root <folder>`.
+**Any other client**: run `npx -y idea-to-code-mcp` over stdio. The server works on the nearest folder with a `plan/`, from where it starts up to your home folder. With no plan yet, a new one goes at the top of the git repository. To choose the folder yourself, pass `--root <folder>`.
 
 ## Tools
 

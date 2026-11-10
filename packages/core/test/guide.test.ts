@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateGuide, generateSkill } from '../src/guide.js';
+import { generateGuide } from '../src/guide.js';
 import { loadFromTexts } from '../src/load.js';
 import { OPERATIONS } from '../src/opDefinitions.js';
 import { ComponentNode, DecisionNode, EndNode, ReferenceNode, StartNode, Status, StepNode } from '../src/schema.js';
@@ -77,14 +77,5 @@ describe('generateGuide', () => {
 
   it('is the same every time', () => {
     expect(generateGuide()).toBe(guide);
-  });
-});
-
-describe('generateSkill', () => {
-  it('has the frontmatter Claude Code needs, and points at the guide', () => {
-    const skill = generateSkill('<!-- m -->');
-    expect(skill.startsWith('---\nname: plan\ndescription: ')).toBe(true);
-    expect(skill).toContain('plan/GUIDE.md');
-    expect(skill).toContain('<!-- m -->');
   });
 });

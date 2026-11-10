@@ -107,7 +107,7 @@ function TurnView({ turn, working, onSettings }: { turn: Turn; working: boolean;
   );
 }
 
-function Composer({ busy, first }: { busy: boolean; first: boolean }) {
+function Composer({ busy }: { busy: boolean }) {
   const [text, setText] = useState('');
   const box = useRef<HTMLTextAreaElement>(null);
 
@@ -138,7 +138,7 @@ function Composer({ busy, first }: { busy: boolean; first: boolean }) {
           ref={box}
           rows={1}
           value={text}
-          placeholder={first ? 'What are you building?' : 'Ask or describe a change'}
+          placeholder="Ask or plan anything"
           aria-label="Message"
           onChange={(event) => {
             setText(event.target.value);
@@ -167,12 +167,13 @@ function Composer({ busy, first }: { busy: boolean; first: boolean }) {
   );
 }
 
-/** What stands in the way of chatting, and the one button that fixes it. Each shows where the first message would. */
-const FIXES: Record<Exclude<ChatView['status'], 'ready'>, { label: string; action: ChatAction | 'settings' }> = {
+/**
+ * What stands in the way of chatting at all, and the one button that fixes it. Having no plan
+ * or no model yet doesn't: the first message starts the plan, and sending without a model says so in place.
+ */
+const FIXES: Record<'no-folder' | 'untrusted', { label: string; action: ChatAction }> = {
   'no-folder': { label: 'Open a folder', action: 'open-folder' },
   untrusted: { label: 'Trust this folder', action: 'trust' },
-  'no-plan': { label: 'Start a plan', action: 'init-plan' },
-  'no-model': { label: 'Choose a model', action: 'settings' },
 };
 
 export function ChatApp() {
@@ -235,8 +236,7 @@ export function ChatApp() {
       </div>
     );
   }
-  // A chat already under way stays readable; sending then says what's missing, in place.
-  if (view.status !== 'ready' && !(view.status === 'no-model' && view.items.length > 0)) {
+  if (view.status === 'no-folder' || view.status === 'untrusted') {
     const fix = FIXES[view.status];
     return (
       <div className="chat">
@@ -245,8 +245,7 @@ export function ChatApp() {
             type="button"
             className="chat__button chat__button--wide"
             onClick={() => {
-              if (fix.action === 'settings') setSettings('models');
-              else send({ type: 'chat-action', action: fix.action });
+              send({ type: 'chat-action', action: fix.action });
             }}
           >
             {fix.label}
@@ -278,7 +277,7 @@ export function ChatApp() {
           />
         ))}
       </div>
-      <Composer busy={view.busy} first={turns.length === 0} />
+      <Composer busy={view.busy} />
     </div>
   );
 }

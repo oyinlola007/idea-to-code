@@ -141,8 +141,8 @@ export class ProjectHost implements vscode.Disposable {
   async applyEdit(name: UiOperation, input: unknown): Promise<EditResult> {
     if (!this.trust.isTrusted || !this.serviceInstance) return { ok: false, message: 'This plan is view-only until you trust the folder.' };
     if (this.agentBusy) return { ok: false, message: BUSY };
-    const result = await this.serviceInstance.apply({ name, input }, { source: 'ui', actor: 'user' });
-    await this.refresh(true);
+    const service = this.serviceInstance;
+    const result = await this.ownWrite(() => service.apply({ name, input }, { source: 'ui', actor: 'user' }));
     return result.ok ? { ok: true, created: result.created } : { ok: false, message: result.message };
   }
 
@@ -159,8 +159,8 @@ export class ProjectHost implements vscode.Disposable {
   private async restoring(run: (service: ProjectService) => Promise<RestoreResult>): Promise<EditResult> {
     if (!this.trust.isTrusted || !this.serviceInstance) return { ok: false, message: 'This plan is view-only until you trust the folder.' };
     if (this.agentBusy) return { ok: false, message: BUSY };
-    const result = await run(this.serviceInstance);
-    await this.refresh(true);
+    const service = this.serviceInstance;
+    const result = await this.ownWrite(() => run(service));
     return result.ok ? { ok: true } : { ok: false, message: result.message };
   }
 
@@ -184,6 +184,25 @@ export class ProjectHost implements vscode.Disposable {
   setPreview(texts: Record<string, string> | null): void {
     this.preview = texts;
     void this.refresh();
+  }
+
+  /**
+   * Writes and takes in the result as one step in the refresh queue, so a refresh
+   * started by a file event can't read the write first and take it for an outside change.
+   */
+  private ownWrite<T>(write: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(async () => {
+      const result = await write();
+      await this.update(true).catch((err: unknown) => {
+        this.log.error(`couldn't refresh the plan: ${err instanceof Error ? err.message : String(err)}`);
+      });
+      return result;
+    });
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   /** Waits for any refresh already under way. */
