@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- **A message that failed for want of a model is answered once you choose one, even after VS Code reloads,** for example after an update. In 1.0.1 it was only answered if the window stayed open.
+
 ## 1.0.1
 
 - **A message sent before choosing a model is answered once one works,** including when you come back from Settings without changing anything, such as after allowing idea-to-code to use your editor's models.

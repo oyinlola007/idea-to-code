@@ -113,7 +113,14 @@ export class ChatService {
   async start(): Promise<void> {
     this.thread = await this.deps.store.current();
     this.threads = await this.deps.store.list();
+    this.waitingForModel = this.waitingIn(this.thread);
     await this.checkModel();
+  }
+
+  /** A chat's last message, if it never reached a model: it's still waiting for one, whenever it was sent. */
+  private waitingIn(thread: Thread | undefined): string | undefined {
+    const last = thread?.turns.at(-1);
+    return last?.error?.action === 'open-model-settings' ? last.id : undefined;
   }
 
   /** Checks the model again and answers a message that was waiting for one. */
@@ -455,6 +462,7 @@ export class ChatService {
     }
     this.thread = thread;
     this.threads = await this.deps.store.list();
+    this.waitingForModel = this.waitingIn(thread);
     this.fire();
   }
 

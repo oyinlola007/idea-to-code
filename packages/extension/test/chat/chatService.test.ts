@@ -25,6 +25,7 @@ interface Harness {
   chooseModel(provider: ModelProvider): Promise<void>;
   /** Makes a model work without announcing it, as when permission is granted outside Settings. */
   chooseModelQuietly(provider: ModelProvider): Promise<void>;
+  reopen(): Promise<void>;
 }
 
 const opened: ChatService[] = [];
@@ -93,38 +94,63 @@ async function harness(
   };
   const files = new MemoryChatFiles();
   const modelListeners = new Set<() => void>();
-  const chat = new ChatService({
-    host,
-    models: {
-      model: (tier) => {
-        if (models.large instanceof ModelError) return Promise.reject(models.large);
-        const provider = tier === 'small' && models.small ? models.small : models.large;
-        return Promise.resolve({ provider, model: tier === 'small' && !models.sameModel ? 'fast' : 'main' });
+  const make = () =>
+    new ChatService({
+      host,
+      models: {
+        model: (tier) => {
+          if (models.large instanceof ModelError) return Promise.reject(models.large);
+          const provider = tier === 'small' && models.small ? models.small : models.large;
+          return Promise.resolve({ provider, model: tier === 'small' && !models.sameModel ? 'fast' : 'main' });
+        },
+        onDidChange: (listener) => {
+          modelListeners.add(listener);
+          return { dispose: () => modelListeners.delete(listener) };
+        },
       },
-      onDidChange: (listener) => {
-        modelListeners.add(listener);
-        return { dispose: () => modelListeners.delete(listener) };
-      },
-    },
-    store: new ChatStore(files, () => clock.now),
-    editor: 'Visual Studio Code',
-    log: { info: () => undefined, warn: () => undefined },
-    now: () => clock.now,
-  });
+      store: new ChatStore(files, () => clock.now),
+      editor: 'Visual Studio Code',
+      log: { info: () => undefined, warn: () => undefined },
+      now: () => clock.now,
+    });
+  const chat = make();
   opened.push(chat);
   await chat.start();
   const chooseModel = async (provider: ModelProvider) => {
     models.large = provider;
     for (const listener of modelListeners) listener();
     // Let the chat check the model and answer anything waiting.
-    for (let i = 0; i < 50 && (chat.view().busy || chat.view().status !== 'ready'); i++) await new Promise((r) => setTimeout(r, 5));
-    while (chat.view().busy) await new Promise((r) => setTimeout(r, 5));
+    for (let i = 0; i < 50 && (h.chat.view().busy || h.chat.view().status !== 'ready'); i++) await new Promise((r) => setTimeout(r, 5));
+    while (h.chat.view().busy) await new Promise((r) => setTimeout(r, 5));
+  };
+  /** A reload: the chat service starts again on the same saved chats. */
+  const reopen = async () => {
+    h.chat.dispose();
+    modelListeners.clear();
+    h.chat = make();
+    opened.push(h.chat);
+    await h.chat.start();
   };
   const chooseModelQuietly = (provider: ModelProvider) => {
     models.large = provider;
     return Promise.resolve();
   };
-  return { chat, service, root, files, busy, previews, reveals, clock, refresh, starts, chooseModel, chooseModelQuietly };
+  const h: Harness = {
+    chat,
+    service,
+    root,
+    files,
+    busy,
+    previews,
+    reveals,
+    clock,
+    refresh,
+    starts,
+    chooseModel,
+    chooseModelQuietly,
+    reopen,
+  };
+  return h;
 }
 
 const fillReminders: Script = {
@@ -338,6 +364,17 @@ describe('a chat turn', () => {
     const items = h.chat.view().items;
     expect(items.filter((i) => i.kind === 'user')).toHaveLength(1);
     expect(items.some((i) => 'action' in i && i.action === 'open-model-settings')).toBe(false);
+  });
+
+  it('answers a message that failed before the editor was reloaded, once a model is chosen', async () => {
+    const h = await harness({ large: new ModelError('not-set-up', 'Add your OpenAI API key first.'), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    // A reload: a new chat service opens the same saved chat.
+    await h.reopen();
+    await h.chooseModel(scripted([{ text: 'It has five features.' }]));
+    const items = h.chat.view().items;
+    expect(items.filter((i) => i.kind === 'user')).toHaveLength(1);
+    expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'It has five features.' });
   });
 
   it('only answers a waiting message from the chat it was sent in', async () => {
