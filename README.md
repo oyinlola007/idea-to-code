@@ -13,7 +13,7 @@ Describe what you're building, and the plan takes shape as a chart you can walk 
 
 ## Get started
 
-1. **Install idea-to-code** in VS Code, Cursor or VSCodium, from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=idea-to-code.idea-to-code) or [Open VSX](https://open-vsx.org/extension/idea-to-code/idea-to-code), and open **Plan** in the activity bar.
+1. **Install idea-to-code** in VS Code, Cursor or VSCodium, from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=oyinlola-ojelere.idea-to-code) or [Open VSX](https://open-vsx.org/extension/oyinlola-ojelere/idea-to-code), and open **Plan** in the activity bar.
 2. **Connect your coding agent**, so it can read the plan and keep it up to date as it builds. For Claude Code:
 
    ```bash

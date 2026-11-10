@@ -131,7 +131,7 @@ export async function journeyScenario(api: ExtensionApi, root: string): Promise<
   });
 
   await step('5. an outside agent edits through the bundled MCP server: recorded, pointed out, named', async () => {
-    const extension = vscode.extensions.getExtension('idea-to-code.idea-to-code');
+    const extension = vscode.extensions.getExtension('oyinlola-ojelere.idea-to-code');
     check(extension !== undefined, 'extension not found');
     const env = { ...(process.env as Record<string, string>), ELECTRON_RUN_AS_NODE: '1' };
     const transport = new StdioClientTransport({
@@ -188,7 +188,7 @@ export async function journeyScenario(api: ExtensionApi, root: string): Promise<
   });
 
   await step('7. an outside agent links the code it wrote, and validate finds nothing missing', async () => {
-    const extension = vscode.extensions.getExtension('idea-to-code.idea-to-code');
+    const extension = vscode.extensions.getExtension('oyinlola-ojelere.idea-to-code');
     await mkdir(join(root, 'src', 'payments'), { recursive: true });
     await writeFile(join(root, 'src', 'payments', 'capture.ts'), 'export function capture(): void {}\n');
     const client = new Client({ name: 'claude-code', version: '1.0.0' });

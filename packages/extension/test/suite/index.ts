@@ -587,7 +587,7 @@ export async function run(): Promise<void> {
   if (!folder) throw new Error('no workspace folder');
   console.log(`suite: ${scenario} in ${vscode.env.appName} ${vscode.version}`);
 
-  const extension = vscode.extensions.getExtension<ExtensionApi>('idea-to-code.idea-to-code');
+  const extension = vscode.extensions.getExtension<ExtensionApi>('oyinlola-ojelere.idea-to-code');
   if (!extension) throw new Error('extension not found');
   const api = await extension.activate();
   await api.host.settled();
