@@ -120,6 +120,11 @@
           "command": "ideaToCode.reopenAsText",
           "when": "activeCustomEditorId == ideaToCode.planEditor",
           "group": "navigation"
+        },
+        {
+          "command": "ideaToCode.exportWebPage",
+          "when": "activeWebviewPanelId == 'ideaToCode.app' || activeCustomEditorId == ideaToCode.planEditor",
+          "group": "1_share"
         }
       ],
       "view/title": [
