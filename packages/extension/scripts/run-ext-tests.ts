@@ -57,6 +57,8 @@ async function runOne(label: string, target: Target, scenario: string): Promise<
       'extensions.autoCheckUpdates': false,
       'telemetry.telemetryLevel': 'off',
       'workbench.tips.enabled': false,
+      // VS Code's own file dialogs, which a test can dismiss; the system ones can't be.
+      'files.simpleDialog.enable': true,
     }),
   );
   console.log(`\n▶ ${label} / ${scenario}`);

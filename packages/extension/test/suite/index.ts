@@ -599,7 +599,7 @@ export async function run(): Promise<void> {
   else {
     await planScenario(api, folder.uri, folder.uri.fsPath);
     await codeLinkSteps(api, folder.uri.fsPath);
-    await exportPageSteps();
+    await exportPageSteps(api, folder.uri.fsPath);
   }
 
   if (failures.length > 0) throw new Error(`${String(failures.length)} step(s) failed:\n${failures.join('\n')}`);

@@ -27,6 +27,8 @@ export interface ExtensionApi {
   chatStorage: vscode.Uri;
   closeApp(): void;
   showLevel(level: string): void;
+  /** Exports the plan to `target` without asking where, for the tests. */
+  exportWebPage(target: vscode.Uri): Promise<vscode.Uri | undefined>;
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -98,7 +100,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.commands.registerCommand('ideaToCode.openApp', () => {
       app.show();
     }),
-    vscode.commands.registerCommand('ideaToCode.exportWebPage', (target?: vscode.Uri) => exportWebPage(context.extensionUri, host, target)),
+    // From a tab's menu, VS Code passes the tab's address: it's never where to save, so it's ignored.
+    vscode.commands.registerCommand('ideaToCode.exportWebPage', () => exportWebPage(context.extensionUri, host)),
     vscode.commands.registerCommand('ideaToCode.showHistory', (session?: string) => {
       app.showHistory(session);
     }),
@@ -125,6 +128,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     closeApp: () => {
       app.close();
     },
+    exportWebPage: (target) => exportWebPage(context.extensionUri, host, target),
     showLevel: (level) => {
       app.showLevel(level);
     },

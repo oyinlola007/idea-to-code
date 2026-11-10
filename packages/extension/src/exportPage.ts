@@ -8,7 +8,7 @@ import { VsCodePlanFiles } from './vscodePlanFiles.js';
 
 const decoder = new TextDecoder();
 
-/** `target` is for the tests: a place to save without asking. */
+/** `target` is for the tests only, through the extension's API: the command never takes one. */
 export async function exportWebPage(extensionUri: vscode.Uri, host: ProjectHost, target?: vscode.Uri): Promise<vscode.Uri | undefined> {
   await host.settled();
   const folder = host.activeFolder;
