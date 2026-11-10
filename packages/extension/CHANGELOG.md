@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- **A message sent before choosing a model is answered once one works,** including when you come back from Settings without changing anything, such as after allowing idea-to-code to use your editor's models.
+- **Sending the message again replaces the one that never reached a model,** so it no longer shows twice with a leftover "Choose a model" button.
+
 ## 1.0.0
 
 The first public release.
