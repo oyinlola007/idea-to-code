@@ -1,18 +1,10 @@
-# Planning docs (local only)
+# Planning docs and spikes (local only)
 docs/
 .claude/
+spikes/
 
-# Dependencies and spike outputs
+# Dependencies
 node_modules/
-spikes/format/.env
-spikes/format/out/
-spikes/extension-runtime/out/
-spikes/extension-runtime/.vscode-test/
-spikes/extension-runtime/*.vsix
-
-spikes/format/fixtures/career-app/
-spikes/format/fixtures/conversations/
-spikes/format/test/__snapshots__/
 
 # Workspace build outputs
 packages/*/dist/
