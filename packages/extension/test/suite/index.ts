@@ -293,27 +293,6 @@ async function planScenario(api: ExtensionApi, rootUri: vscode.Uri, root: string
     await closeAll();
   });
 
-  await step('the "text" setting opens plan files as text, but an explicit preview still works', async () => {
-    const config = vscode.workspace.getConfiguration('ideaToCode.planFiles');
-    await config.update('openAs', 'text', vscode.ConfigurationTarget.Global);
-    try {
-      await vscode.commands.executeCommand('vscode.open', bookings);
-      await until('a text tab', () => tabsFor(bookings).some((t) => t.input instanceof vscode.TabInputText));
-      await sleep(300);
-      check(tabsFor(bookings).length === 1, `${String(tabsFor(bookings).length)} tabs`);
-      const rendered = nextRender(api, (r) => r.features === 5);
-      await vscode.commands.executeCommand('ideaToCode.openPreviewToSide', bookings);
-      await rendered;
-      check(
-        tabsFor(bookings).some((t) => t.input instanceof vscode.TabInputCustom),
-        'preview was undone',
-      );
-    } finally {
-      await config.update('openAs', undefined, vscode.ConfigurationTarget.Global);
-      await closeAll();
-    }
-  });
-
   await step('a folder called plan with no real plan quietly opens as text', async () => {
     await mkdir(join(root, 'notes', 'plan', 'features'), { recursive: true });
     const strayPath = join(root, 'notes', 'plan', 'map.yaml');

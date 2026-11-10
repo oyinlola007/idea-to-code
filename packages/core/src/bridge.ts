@@ -217,15 +217,8 @@ export const ModelSettingsPatch = z.strictObject({
 export type ModelSettingsPatch = z.infer<typeof ModelSettingsPatch>;
 
 /** The tabs of the settings view. */
-export const SettingsTab = z.enum(['models', 'chart']);
+export const SettingsTab = z.enum(['models']);
 export type SettingsTab = z.infer<typeof SettingsTab>;
-
-/** How plans are shown. */
-export const ChartSettings = z.strictObject({
-  /** What opening a plan file shows. */
-  openAs: z.enum(['chart', 'text']),
-});
-export type ChartSettings = z.infer<typeof ChartSettings>;
 
 export const ModelTestResult = z.strictObject({
   tier: ModelTier,
@@ -247,7 +240,6 @@ export const HostMessage = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('show-settings'), tab: SettingsTab.optional() }),
   z.strictObject({ type: z.literal('model-settings'), view: ModelSettingsView }),
   z.strictObject({ type: z.literal('model-test-result'), results: z.array(ModelTestResult) }),
-  z.strictObject({ type: z.literal('chart-settings'), view: ChartSettings }),
   z.strictObject({ type: z.literal('chat'), view: ChatView }),
   /** More streamed text for an assistant item, appended to what the page has. */
   z.strictObject({ type: z.literal('chat-text'), itemId: ItemId, text: z.string().max(20_000) }),
@@ -277,8 +269,6 @@ export const WebviewMessage = z.discriminatedUnion('type', [
   /** Asks the host to prompt for a key, in the editor's own box. A key never comes from the page. */
   z.strictObject({ type: z.literal('model-key'), provider: z.string().max(50), action: z.enum(['set', 'remove']) }),
   z.strictObject({ type: z.literal('model-test') }),
-  z.strictObject({ type: z.literal('chart-settings-get') }),
-  z.strictObject({ type: z.literal('chart-settings-set'), patch: ChartSettings.partial() }),
   /** The chat page switched between the conversation and settings, so its title can follow. */
   z.strictObject({ type: z.literal('settings-shown'), shown: z.boolean() }),
   z.strictObject({ type: z.literal('init-plan') }),

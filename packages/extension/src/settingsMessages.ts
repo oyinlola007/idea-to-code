@@ -1,21 +1,7 @@
-// The settings' side of the chat page's messages: models (only in a trusted folder,
-// since Restricted Mode has no chat) and how plans are shown (user settings).
-import type { ChartSettings, HostMessage, WebviewMessage } from '@idea-to-code/core';
-import * as vscode from 'vscode';
+// The settings' side of the chat page's messages: models, only in a trusted folder,
+// since Restricted Mode has no chat.
+import type { HostMessage, WebviewMessage } from '@idea-to-code/core';
 import type { ModelHost } from './models/modelHost.js';
-
-const CHART_SECTION = 'ideaToCode.planFiles';
-
-export function chartSettings(): ChartSettings {
-  return { openAs: vscode.workspace.getConfiguration(CHART_SECTION).get('openAs') === 'text' ? 'text' : 'chart' };
-}
-
-/** Fires when a setting the chart tab shows changes, wherever it was changed. */
-export function onChartSettingsChange(listener: () => void): vscode.Disposable {
-  return vscode.workspace.onDidChangeConfiguration((event) => {
-    if (event.affectsConfiguration(CHART_SECTION)) listener();
-  });
-}
 
 /** Handles a settings message, if it is one. Answers whether it was. */
 export async function handleSettingsMessage(
@@ -38,13 +24,6 @@ export async function handleSettingsMessage(
       return true;
     case 'model-test':
       if (trusted) post({ type: 'model-test-result', results: await models.test() });
-      return true;
-    case 'chart-settings-get':
-      post({ type: 'chart-settings', view: chartSettings() });
-      return true;
-    case 'chart-settings-set':
-      if (message.patch.openAs !== undefined)
-        await vscode.workspace.getConfiguration(CHART_SECTION).update('openAs', message.patch.openAs, vscode.ConfigurationTarget.Global);
       return true;
     default:
       return false;

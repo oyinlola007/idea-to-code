@@ -181,15 +181,6 @@
           "default": {},
           "scope": "application",
           "description": "The main and small model chosen for each provider."
-        },
-        "ideaToCode.planFiles.openAs": {
-          "type": "string",
-          "enum": [
-            "chart",
-            "text"
-          ],
-          "default": "chart",
-          "description": "How plan files open: as a chart, or as text."
         }
       }
     },

@@ -1,7 +1,7 @@
 // The chat in the idea-to-code sidebar: your messages, the agent's replies, and one
 // line when the plan changed. Everything else (which model, each tool call) stays out
 // of sight. The page only draws; the conversation and the agent live in the host.
-import type { ChartSettings, ChatAction, ChatItem, ChatView, ModelSettingsView, ModelTestResult, SettingsTab } from '@idea-to-code/core';
+import type { ChatAction, ChatItem, ChatView, ModelSettingsView, ModelTestResult, SettingsTab } from '@idea-to-code/core';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { onHostMessage, send } from '../bridge.js';
 import { Settings } from './Settings.js';
@@ -181,7 +181,6 @@ export function ChatApp() {
   const [settings, setSettings] = useState<SettingsTab | null>(null);
   const [models, setModels] = useState<ModelSettingsView | null>(null);
   const [test, setTest] = useState<ModelTestResult[] | 'running' | null>(null);
-  const [chart, setChart] = useState<ChartSettings | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
 
@@ -195,7 +194,6 @@ export function ChatApp() {
         // A result says nothing about settings that have since changed.
         setTest((current) => (current === 'running' ? current : null));
       } else if (message.type === 'model-test-result') setTest(message.results);
-      else if (message.type === 'chart-settings') setChart(message.view);
     });
     send({ type: 'ready' });
     return stop;
@@ -205,7 +203,6 @@ export function ChatApp() {
   useEffect(() => {
     send({ type: 'settings-shown', shown: settings !== null });
     if (settings === 'models') send({ type: 'model-settings-get' });
-    if (settings === 'chart') send({ type: 'chart-settings-get' });
   }, [settings]);
 
   // Follows new text, unless the reader has scrolled up to look at something.
@@ -219,8 +216,6 @@ export function ChatApp() {
     return (
       <div className="chat">
         <Settings
-          tab={settings}
-          onTab={setSettings}
           onBack={() => {
             setSettings(null);
           }}
@@ -231,7 +226,6 @@ export function ChatApp() {
             setTest('running');
             send({ type: 'model-test' });
           }}
-          chart={chart}
         />
       </div>
     );

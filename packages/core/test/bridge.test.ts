@@ -121,7 +121,6 @@ describe('chat messages', () => {
       { type: 'chat-show-changes', reveal: { level: 'overview', ids: [] } },
       { type: 'toggle-theme' },
       { type: 'settings-shown', shown: true },
-      { type: 'chart-settings-set', patch: { openAs: 'text' } },
     ]) {
       expect(WebviewMessage.safeParse(message).success, JSON.stringify(message)).toBe(true);
     }

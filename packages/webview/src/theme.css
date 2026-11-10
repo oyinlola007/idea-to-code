@@ -1665,29 +1665,14 @@ body[data-view='chat'] {
   border-bottom: 1px solid var(--vscode-panel-border, var(--itc-border));
 }
 
-.tabs {
-  display: flex;
-  gap: 14px;
-}
-
-.tabs__tab {
+.settings__title {
   height: 32px;
+  margin: 0 0 -1px;
   padding: 0 1px;
-  border: 0;
-  border-bottom: 1px solid transparent;
-  margin-bottom: -1px;
-  background: none;
-  color: var(--vscode-panelTitle-inactiveForeground, var(--itc-muted));
-  cursor: pointer;
-}
-
-.tabs__tab:hover {
+  border-bottom: 1px solid var(--vscode-panelTitle-activeBorder, var(--vscode-focusBorder));
+  font: inherit;
+  line-height: 32px;
   color: var(--vscode-panelTitle-activeForeground, var(--chat-fg));
-}
-
-.tabs__tab[aria-selected='true'] {
-  color: var(--vscode-panelTitle-activeForeground, var(--chat-fg));
-  border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--vscode-focusBorder));
 }
 
 .settings__pane {
@@ -1777,30 +1762,6 @@ select.field {
 
 .results__failed .codicon {
   color: var(--vscode-errorForeground);
-}
-
-.segmented {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 5px;
-  background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, transparent);
-}
-
-.segmented__option {
-  min-width: 64px;
-  height: 22px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 3px;
-  background: none;
-  color: var(--itc-muted);
-  cursor: pointer;
-}
-
-.segmented__option[aria-checked='true'] {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
 }
 
 .setting__under {

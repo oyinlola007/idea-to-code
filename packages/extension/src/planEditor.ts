@@ -1,5 +1,5 @@
 // Plan files open as a chart, like markdown's preview but as the editor itself. Only
-// real plan files stay: anything else, or the "text" setting, quietly reopens as text.
+// real plan files stay: anything else quietly reopens as text.
 import * as vscode from 'vscode';
 import { featureOfPlanFile } from './planPaths.js';
 import type { ProjectHost } from './projectHost.js';
@@ -9,9 +9,6 @@ import { webviewHtml, webviewOptions } from './webviewHtml.js';
 export const EDITOR_VIEW_TYPE = 'ideaToCode.planEditor';
 
 export class PlanEditor implements vscode.CustomTextEditorProvider {
-  /** Files the user explicitly asked to see as a chart, which the "text" setting mustn't undo. */
-  private readonly chartRequested = new Set<string>();
-
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly host: ProjectHost,
@@ -20,12 +17,9 @@ export class PlanEditor implements vscode.CustomTextEditorProvider {
   ) {}
 
   async resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): Promise<void> {
-    const key = document.uri.toString();
-    const requested = this.chartRequested.delete(key);
     await this.host.settled();
-    const setting = vscode.workspace.getConfiguration('ideaToCode.planFiles').get<string>('openAs');
     const planFile = this.host.planFile(document.uri);
-    if (planFile === undefined || (setting === 'text' && !requested)) {
+    if (planFile === undefined) {
       await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default', panel.viewColumn);
       panel.dispose();
       return;
@@ -41,7 +35,6 @@ export class PlanEditor implements vscode.CustomTextEditorProvider {
   async openToSide(uri: vscode.Uri | undefined): Promise<void> {
     const target = uri ?? activeResource();
     if (!target) return;
-    this.chartRequested.add(target.toString());
     await vscode.commands.executeCommand('vscode.openWith', target, EDITOR_VIEW_TYPE, vscode.ViewColumn.Beside);
   }
 

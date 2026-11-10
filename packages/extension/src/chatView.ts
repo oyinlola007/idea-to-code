@@ -4,7 +4,7 @@
 import { HostMessage, WebviewMessage, type ChatAction, type ChatView, type Reveal, type SettingsTab } from '@idea-to-code/core';
 import * as vscode from 'vscode';
 import type { ProjectHost } from './projectHost.js';
-import { chartSettings, handleSettingsMessage, onChartSettingsChange } from './settingsMessages.js';
+import { handleSettingsMessage } from './settingsMessages.js';
 import { webviewHtml, webviewOptions } from './webviewHtml.js';
 
 export const CHAT_VIEW_ID = 'ideaToCode.chat';
@@ -94,9 +94,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         void this.host.models.view().then((models) => {
           this.post({ type: 'model-settings', view: models });
         });
-      }),
-      onChartSettingsChange(() => {
-        this.post({ type: 'chart-settings', view: chartSettings() });
       }),
       webview.onDidReceiveMessage(async (raw: unknown) => {
         const parsed = WebviewMessage.safeParse(raw);
