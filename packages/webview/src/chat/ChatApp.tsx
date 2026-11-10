@@ -251,26 +251,33 @@ export function ChatApp() {
   const turns = groupTurns(view.items);
   return (
     <div className="chat">
-      <div
-        ref={list}
-        className="chat__list"
-        aria-live="polite"
-        onScroll={(event) => {
-          const el = event.currentTarget;
-          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-        }}
-      >
-        {turns.map((turn, i) => (
-          <TurnView
-            key={turn.user?.id ?? i}
-            turn={turn}
-            working={view.busy && i === turns.length - 1}
-            onSettings={() => {
-              setSettings('models');
-            }}
-          />
-        ))}
-      </div>
+      {turns.length === 0 ? (
+        <div className="chat__empty">
+          <span className="codicon codicon-type-hierarchy" aria-hidden="true" />
+          <p>{view.project ? `What’s next for ${view.project}?` : 'What are you building?'}</p>
+        </div>
+      ) : (
+        <div
+          ref={list}
+          className="chat__list"
+          aria-live="polite"
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+          }}
+        >
+          {turns.map((turn, i) => (
+            <TurnView
+              key={turn.user?.id ?? i}
+              turn={turn}
+              working={view.busy && i === turns.length - 1}
+              onSettings={() => {
+                setSettings('models');
+              }}
+            />
+          ))}
+        </div>
+      )}
       <Composer busy={view.busy} />
     </div>
   );

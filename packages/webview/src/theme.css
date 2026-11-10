@@ -1768,6 +1768,25 @@ select.field {
   margin-top: 6px;
 }
 
+/* Before the first message: the plan icon and one question, centred above the box. */
+.chat__empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  color: var(--itc-muted);
+  text-align: center;
+}
+.chat__empty .codicon {
+  font-size: 28px;
+  opacity: 0.6;
+}
+.chat__empty p {
+  margin: 0;
+}
+
 /* The one fix for what stands in the way, as VS Code's own empty views show theirs:
    the width of the view, up to a point, with room above. */
 .chat__fix {

@@ -146,6 +146,8 @@ export const ChatView = z.strictObject({
   busy: z.boolean(),
   /** The model in use, in words, e.g. "gpt-5.5 · your OpenAI key". Absent until one is set up. */
   model: z.string().max(300).optional(),
+  /** The plan's project name, for the empty chat. Absent until there's a readable plan. */
+  project: z.string().max(200).optional(),
 });
 export type ChatView = z.infer<typeof ChatView>;
 

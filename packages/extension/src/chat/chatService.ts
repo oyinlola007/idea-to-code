@@ -220,7 +220,10 @@ export class ChatService {
     const live = this.live;
     const items = (thread?.turns ?? []).filter((turn) => turn.id !== live?.turn.id).flatMap((turn) => this.turnItems(turn));
     if (live) items.push(...this.liveItems(live));
+    const state = this.deps.host.state();
+    const project = state.kind === 'plan' ? state.plan.project?.slice(0, 200) : undefined;
     return {
+      ...(project ? { project } : {}),
       status: this.status(),
       threads: this.threads,
       current: thread ? { id: thread.id, title: thread.title } : null,

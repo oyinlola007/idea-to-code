@@ -143,6 +143,12 @@ describe('the first message', () => {
     expect(h.chat.view().items.map((i) => i.kind)).toEqual(['user', 'assistant', 'assistant', 'changes']);
   });
 
+  it('names the project before the first message, once there is a plan', async () => {
+    const h = await harness({ large: scripted([]), sameModel: true }, { noPlan: true });
+    expect(h.chat.view().project).toBeUndefined();
+    expect((await harness({ large: scripted([]), sameModel: true })).chat.view().project).toBe('Toolshed');
+  });
+
   it('never starts a plan that is already there', async () => {
     const h = await harness({ large: scripted([{ text: 'It has five features.' }]), sameModel: true });
     await h.chat.send('What is in the plan?');
