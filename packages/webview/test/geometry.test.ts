@@ -42,6 +42,84 @@ beforeAll(async () => {
 
 const source = { file: 'f', line: 1 };
 
+// A busy overview, made up for this test: one feature fans out to four others with
+// labelled connections, one of them skipping a row. Their sideways runs share the
+// gap under the card, where labels used to cover each other's lines (ITC-37).
+const busyMap = `project: Tool library
+features:
+${[
+  [
+    'members',
+    'Members and sign-in',
+    'Join with email, phone or a library card, recover access and stay signed in on every device you use.',
+  ],
+  [
+    'assistant',
+    'Assistant',
+    'A chat that answers repair questions for members and visitors, grounded in the guides and the shared catalogue.',
+  ],
+  ['guides', 'Repair guides', 'Staff upload manuals and how-to sheets; each branch keeps its own set, searchable by tool and by task.'],
+  ['events', 'Events', 'Workshops and repair cafés with sign-up, reminders and a waiting list when a session is full.'],
+  ['branches', 'Branches and admin', 'Branch set-up, opening hours, staff roles and the settings each branch can change for its members.'],
+  ['payments', 'Payments', 'Membership fees, deposits and refunds.'],
+  ['interests', 'Member interests', 'What members care about, learned from chats and short surveys, kept with their profile.'],
+  ['sponsors', 'Sponsor slots', 'Local sponsors shown beside answers, picked by topic and capped per session.'],
+  ['referrals', 'Referrals and rewards', 'Invite links, points for helping others, and rewards a member can claim at any branch.'],
+  ['community', 'Community', 'Stories of things fixed, comments and thanks between members.'],
+  ['newsletters', 'Newsletters', 'Monthly emails per branch with events, new tools and repair tips.'],
+  ['project-review', 'Project review', 'Members share a project plan and get step-by-step feedback before they start.'],
+  ['reports', 'Reports and monitoring', 'Dashboards for staff with questions asked, busy hours, popular tools and slow answers.'],
+]
+  .map(([id, label, description]) => `  - id: ${id}\n    label: ${label}\n    description: ${description}`)
+  .join('\n')}
+components:
+${[
+  'Database',
+  'Search index',
+  'Language model',
+  'File store',
+  'Card payments',
+  'Text messages',
+  'Email',
+  'Cloud drive',
+  'Maps',
+  'Chat webhooks',
+  'API server',
+  'Web client',
+]
+  .map((label) => `  - id: ${label.toLowerCase().replace(/ /g, '-')}\n    label: ${label}\n    kind: service\n    status: done`)
+  .join('\n')}
+connections:
+${[
+  ['guides', 'assistant', 'repair context', 'manual + how-to passages'],
+  ['branches', 'assistant', 'configures', 'branch prompt, opening hours, tone'],
+  ['assistant', 'interests', 'profile updates', 'topics + skill level'],
+  ['assistant', 'sponsors', 'sponsor slots', 'session sponsor state'],
+  ['members', 'referrals', 'invite tracking', 'invite code'],
+  ['members', 'interests', 'merge on sign-up', 'visitor profile + survey answers'],
+  ['community', 'referrals', 'earns points', 'story, comment, thanks events'],
+  ['branches', 'payments', 'billing', 'fee schedule, deposit rules'],
+  ['assistant', 'reports', 'usage', 'question count, latency, topics'],
+  ['assistant', 'project-review', 'feedback streaming', 'project feedback chat turns'],
+]
+  .map(([from, to, label, data]) => `  - from: ${from}\n    to: ${to}\n    label: ${label}\n    data: ${data}`)
+  .join('\n')}
+`;
+
+describe('a busy overview', () => {
+  it('keeps every other line out from under a label', async () => {
+    const busy = buildViewModel(loadFromTexts({ 'plan/map.yaml': busyMap }));
+    expect(busy.issues.filter((i) => i.severity === 'error')).toEqual([]);
+    const level = busy.levels.overview;
+    if (!level) throw new Error('no overview');
+    const { graph, boxes, labels } = toElkGraph(level, approxMeasure);
+    const laid = fromElk(await elk.layout(graph), boxes, labels, level);
+    expect(labelCrossings(laid)).toBe(0);
+    expect(labelCollisions(laid)).toBe(0);
+    expect(edgesThroughNodes(laid)).toBe(0);
+  });
+});
+
 describe('Toolshed layout', () => {
   it('has every level', () => {
     expect(placed.size).toBe(Object.keys(model.levels).length);

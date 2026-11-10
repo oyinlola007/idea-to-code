@@ -46,6 +46,9 @@ export const LAYOUT_OPTIONS: Record<string, string> = {
   'elk.spacing.nodeNode': '28',
   'elk.spacing.edgeNode': '24',
   'elk.spacing.edgeEdge': '16',
+  // Lines leaving a card run sideways in the gap below it. Kept this far apart, a
+  // label sitting on one of them doesn't cover the next (ITC-37).
+  'elk.layered.spacing.edgeEdgeBetweenLayers': '32',
   'elk.spacing.edgeLabel': '12',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
   'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
