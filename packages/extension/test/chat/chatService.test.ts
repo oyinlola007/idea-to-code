@@ -21,6 +21,8 @@ interface Harness {
   refresh(): Promise<void>;
   /** How many times the chat asked the editor to start a plan. */
   starts: number[];
+  /** Sets up a model, as choosing one in Settings does. */
+  chooseModel(provider: ModelProvider): Promise<void>;
 }
 
 const opened: ChatService[] = [];
@@ -88,6 +90,7 @@ async function harness(
     },
   };
   const files = new MemoryChatFiles();
+  const modelListeners = new Set<() => void>();
   const chat = new ChatService({
     host,
     models: {
@@ -96,7 +99,10 @@ async function harness(
         const provider = tier === 'small' && models.small ? models.small : models.large;
         return Promise.resolve({ provider, model: tier === 'small' && !models.sameModel ? 'fast' : 'main' });
       },
-      onDidChange: () => ({ dispose: () => undefined }),
+      onDidChange: (listener) => {
+        modelListeners.add(listener);
+        return { dispose: () => modelListeners.delete(listener) };
+      },
     },
     store: new ChatStore(files, () => clock.now),
     editor: 'Visual Studio Code',
@@ -105,7 +111,14 @@ async function harness(
   });
   opened.push(chat);
   await chat.start();
-  return { chat, service, root, files, busy, previews, reveals, clock, refresh, starts };
+  const chooseModel = async (provider: ModelProvider) => {
+    models.large = provider;
+    for (const listener of modelListeners) listener();
+    // Let the chat check the model and answer anything waiting.
+    for (let i = 0; i < 50 && (chat.view().busy || chat.view().status !== 'ready'); i++) await new Promise((r) => setTimeout(r, 5));
+    while (chat.view().busy) await new Promise((r) => setTimeout(r, 5));
+  };
+  return { chat, service, root, files, busy, previews, reveals, clock, refresh, starts, chooseModel };
 }
 
 const fillReminders: Script = {
@@ -273,6 +286,33 @@ describe('a chat turn', () => {
   it('says what to do when no model is set up, before anything is typed', async () => {
     const h = await harness({ large: new ModelError('not-set-up', 'Add your OpenAI API key first.') });
     expect(h.chat.view().status).toBe('no-model');
+  });
+
+  it('answers the message sent before a model was set up, once one is chosen', async () => {
+    const h = await harness({ large: new ModelError('not-set-up', 'Add your OpenAI API key first.'), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    expect(h.chat.view().items.at(-1)).toMatchObject({ kind: 'notice', action: 'open-model-settings' });
+    await h.chooseModel(scripted([{ text: 'It has five features.' }]));
+    const items = h.chat.view().items;
+    expect(items.filter((i) => i.kind === 'user')).toHaveLength(1);
+    expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'It has five features.' });
+  });
+
+  it('never sends a message again just because the model settings changed', async () => {
+    const model = scripted([{ text: 'It has five features.' }, { text: 'again' }]);
+    const h = await harness({ large: model, sameModel: true });
+    await h.chat.send('What is in the plan?');
+    await h.chooseModel(model);
+    expect(model.requests).toHaveLength(1);
+  });
+
+  it('only answers a waiting message from the chat it was sent in', async () => {
+    const h = await harness({ large: new ModelError('not-set-up', 'Add your OpenAI API key first.'), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    await h.chat.newThread();
+    const model = scripted([{ text: 'It has five features.' }]);
+    await h.chooseModel(model);
+    expect(model.requests).toHaveLength(0);
   });
 
   it('keeps chats apart, and reopens the one used last', async () => {

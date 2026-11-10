@@ -259,7 +259,7 @@ function emptyText(model: ViewModel, level: Level, canEdit: boolean): string {
   if (level.id !== OVERVIEW) return canEdit ? 'This flow has no steps yet. Use + to add one.' : 'This flow has no steps yet.';
   if (model.issues.some((issue) => issue.file === 'plan/map.yaml' && issue.severity === 'error'))
     return "plan/map.yaml can't be read. Fix the problem above to see the plan.";
-  return canEdit ? 'No features yet. Use + to add one, or ask your coding agent to plan the first.' : 'No features yet.';
+  return 'No features yet.';
 }
 
 function firstMeasure(): Measure {

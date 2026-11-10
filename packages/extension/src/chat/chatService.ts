@@ -90,6 +90,8 @@ export class ChatService {
   /** True while a first message is starting the plan, so a second send waits its turn. */
   private starting = false;
   private modelReady = true;
+  /** A turn from this session that failed for want of a model, answered once one is set up. */
+  private waitingForModel: string | undefined;
   private readonly listeners = new Set<() => void>();
   private readonly textListeners = new Set<(event: { itemId: string; text: string }) => void>();
   private readonly subscriptions: Disposable[] = [];
@@ -102,7 +104,7 @@ export class ChatService {
         this.fire();
       }),
       deps.models.onDidChange(() => {
-        void this.checkModel();
+        void this.checkModel().then(() => this.answerWaiting());
       }),
     );
   }
@@ -112,6 +114,16 @@ export class ChatService {
     this.thread = await this.deps.store.current();
     this.threads = await this.deps.store.list();
     await this.checkModel();
+  }
+
+  /** Sends again the message that was waiting for a model, now that the settings changed. */
+  private async answerWaiting(): Promise<void> {
+    const thread = this.thread;
+    const last = thread?.turns.at(-1);
+    if (!thread || !last || last.id !== this.waitingForModel || this.live || this.starting || this.status() !== 'ready') return;
+    this.waitingForModel = undefined;
+    thread.turns.pop();
+    await this.send(last.user);
   }
 
   private async checkModel(): Promise<void> {
@@ -332,6 +344,7 @@ export class ChatService {
       await this.deps.store.save(thread);
       this.threads = await this.deps.store.list();
       this.live = undefined;
+      this.waitingForModel = turn.error?.action === 'open-model-settings' ? turn.id : undefined;
       this.deps.host.setBusy(false);
       this.fire();
       if (turn.reveal) this.deps.host.reveal(turn.reveal, false);
