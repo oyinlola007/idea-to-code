@@ -3,7 +3,7 @@
 // can point at a file and line.
 import { z } from 'zod';
 
-export const Slug = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'ids are lowercase words joined by hyphens, e.g. "tailor-cv"');
+export const Slug = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'ids are lowercase words joined by hyphens, e.g. "pick-dates"');
 
 export const Status = z.enum(['todo', 'in_progress', 'done']);
 
