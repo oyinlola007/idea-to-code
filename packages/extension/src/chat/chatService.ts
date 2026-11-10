@@ -92,6 +92,8 @@ export class ChatService {
   private modelReady = true;
   /** A turn from this session that failed for want of a model, answered once one is set up. */
   private waitingForModel: string | undefined;
+  /** Whether a waiting message was already sent again on its own this session. */
+  private triedAutomatically = false;
   private readonly listeners = new Set<() => void>();
   private readonly textListeners = new Set<(event: { itemId: string; text: string }) => void>();
   private readonly subscriptions: Disposable[] = [];
@@ -102,6 +104,8 @@ export class ChatService {
     this.subscriptions.push(
       deps.host.onDidChange(() => {
         this.fire();
+        // The plan may have just loaded: a message waiting for it and a model can go now.
+        void this.answerWaiting(true);
       }),
       deps.models.onDidChange(() => {
         void this.checkModel().then(() => this.answerWaiting());
@@ -115,6 +119,8 @@ export class ChatService {
     this.threads = await this.deps.store.list();
     this.waitingForModel = this.waitingIn(this.thread);
     await this.checkModel();
+    // A model may already work, set up while the editor was closed.
+    await this.answerWaiting(true);
   }
 
   /** A chat's last message, if it never reached a model: it's still waiting for one, whenever it was sent. */
@@ -129,11 +135,21 @@ export class ChatService {
     await this.answerWaiting();
   }
 
-  /** Sends again the message that was waiting for a model, now that the settings changed. */
-  private async answerWaiting(): Promise<void> {
+  /**
+   * Sends again the message that was waiting for a model. `automatic` (on opening, or when the plan
+   * loads) is tried once a session, so a key that's present but rejected can't retry in a loop.
+   */
+  private async answerWaiting(automatic = false): Promise<void> {
     const thread = this.thread;
     const last = thread?.turns.at(-1);
-    if (!thread || !last || last.id !== this.waitingForModel || this.live || this.starting || this.status() !== 'ready') return;
+    if (!thread || !last || last.id !== this.waitingForModel || this.live || this.starting) return;
+    // Ready, or with no plan yet but a working model: sending starts the plan, as it does when typed.
+    const status = this.status();
+    if (status !== 'ready' && !(status === 'no-plan' && this.modelReady)) return;
+    if (automatic) {
+      if (this.triedAutomatically) return;
+      this.triedAutomatically = true;
+    }
     this.waitingForModel = undefined;
     thread.turns.pop();
     await this.send(last.user);

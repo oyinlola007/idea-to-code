@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- **A message waiting for a model is answered as soon as one works,** including when the model was set up before VS Code opened: no visit to Settings needed.
+
 ## 1.0.2
 
 - **A message that failed for want of a model is answered once you choose one, even after VS Code reloads,** for example after an update. In 1.0.1 it was only answered if the window stayed open.

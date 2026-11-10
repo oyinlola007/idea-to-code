@@ -377,6 +377,28 @@ describe('a chat turn', () => {
     expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'It has five features.' });
   });
 
+  it('answers a waiting message on opening, when a model was set up while the editor was closed', async () => {
+    const h = await harness({ large: new ModelError('not-set-up', 'Add your OpenAI API key first.'), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    await h.chooseModelQuietly(scripted([{ text: 'It has five features.' }]));
+    await h.reopen();
+    for (let i = 0; i < 50 && h.chat.view().items.at(-1)?.kind !== 'assistant'; i++) await new Promise((r) => setTimeout(r, 10));
+    const items = h.chat.view().items;
+    expect(items.filter((i) => i.kind === 'user')).toHaveLength(1);
+    expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'It has five features.' });
+  });
+
+  it('tries a waiting message on its own only once, so a rejected key cannot loop', async () => {
+    const h = await harness({ large: new ModelError('key-rejected', 'OpenAI rejected the key.'), sameModel: true });
+    await h.chat.send('What is in the plan?');
+    const rejected = scripted([]);
+    await h.chooseModelQuietly(rejected);
+    await h.reopen();
+    for (let i = 0; i < 5; i++) await h.refresh();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(rejected.requests.length).toBeLessThanOrEqual(1);
+  });
+
   it('only answers a waiting message from the chat it was sent in', async () => {
     const h = await harness({ large: new ModelError('not-set-up', 'Add your OpenAI API key first.'), sameModel: true });
     await h.chat.send('What is in the plan?');
