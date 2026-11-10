@@ -1,0 +1,83 @@
+# Pushing a tag like v1.0.0 publishes the extension to the VS Code Marketplace and Open VSX,
+# the MCP server to npm, and the .vsix to a GitHub release. A store that already has that
+# version is skipped, so a failed release can simply be run again. Both share one version.
+#
+# Secrets: VSCE_PAT (Marketplace) and OVSX_PAT (Open VSX). npm needs no secret: the
+# package trusts this workflow on npmjs.com (trusted publishing), which also adds provenance.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # the GitHub release
+  id-token: write # npm trusted publishing and provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+
+      - name: The tag matches both versions
+        run: |
+          version=$(node -p "require('./packages/extension/package.json').version")
+          server=$(node -p "require('./packages/mcp/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ] || [ "$server" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME, extension $version and MCP server $server must all match"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm package
+
+      - name: VS Code Marketplace
+        working-directory: packages/extension
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: pnpm dlx @vscode/vsce@4.1.0 publish --no-dependencies --skip-duplicate --packagePath "idea-to-code-$VERSION.vsix"
+
+      - name: Open VSX
+        working-directory: packages/extension
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: pnpm dlx ovsx@1.3.0 publish --skip-duplicate --packagePath "idea-to-code-$VERSION.vsix"
+
+      - name: npm
+        working-directory: packages/mcp
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "idea-to-code-mcp@$version" version > /dev/null 2>&1; then
+            echo "idea-to-code-mcp $version is already on npm"
+            exit 0
+          fi
+          # Trusted publishing needs npm 11.5.1 or later.
+          node -e "const [a,b,c]=process.argv[1].split('.').map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$(npm --version)" \
+            || { echo "::error::npm $(npm --version) is too old for trusted publishing"; exit 1; }
+          pnpm pack --pack-destination "$RUNNER_TEMP"
+          npm publish "$RUNNER_TEMP/idea-to-code-mcp-$version.tgz" --provenance --access public
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # This version's section of the changelog, without its heading.
+          awk -v v="## $VERSION" '$0==v{on=1;next} /^## /{on=0} on' packages/extension/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "The GitHub release $GITHUB_REF_NAME already exists"
+          else
+            gh release create "$GITHUB_REF_NAME" "packages/extension/idea-to-code-$VERSION.vsix" \
+              --title "idea-to-code $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          fi

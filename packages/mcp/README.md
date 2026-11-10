@@ -4,6 +4,8 @@ An MCP server for planning software as nested flowcharts with your coding agent.
 
 With this server, Claude Code, Cursor, Copilot or any other MCP client reads and changes the plan through checked tools, instead of editing the YAML by hand.
 
+![Claude Code adds a branch to a flow through the server; the chart and History show it](https://raw.githubusercontent.com/oyinlola007/idea-to-code/main/packages/extension/images/agent.gif)
+
 ## Setup
 
 **Claude Code**

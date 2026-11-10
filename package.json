@@ -16,7 +16,7 @@
     "format:check": "prettier --check .",
     "build": "pnpm -r run build",
     "validate-plan": "pnpm --filter @idea-to-code/core run validate-plan",
-    "package": "pnpm build && cd packages/extension && pnpm dlx @vscode/vsce@4.1.0 package --no-dependencies --allow-missing-repository --skip-license"
+    "package": "pnpm build && cd packages/extension && pnpm dlx @vscode/vsce@4.1.0 package --no-dependencies"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

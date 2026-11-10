@@ -1,19 +1,48 @@
 {
   "name": "idea-to-code",
   "displayName": "idea-to-code",
-  "description": "Plan software as nested flowcharts, with any coding agent.",
-  "version": "0.0.0",
-  "private": true,
-  "license": "MIT",
+  "description": "Plan software as nested flowcharts, with your coding agent.",
+  "version": "1.0.0",
   "publisher": "idea-to-code",
+  "author": "Oyinlola Ojelere",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1a5fc4",
+    "theme": "dark"
+  },
+  "categories": [
+    "Visualization",
+    "AI",
+    "Chat"
+  ],
+  "keywords": [
+    "plan",
+    "planning",
+    "flowchart",
+    "diagram",
+    "architecture",
+    "mcp",
+    "agent",
+    "claude",
+    "copilot",
+    "cursor"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oyinlola007/idea-to-code.git",
+    "directory": "packages/extension"
+  },
+  "homepage": "https://github.com/oyinlola007/idea-to-code#readme",
+  "bugs": {
+    "url": "https://github.com/oyinlola007/idea-to-code/issues"
+  },
+  "private": true,
   "type": "module",
   "main": "./dist/extension.cjs",
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": [
-    "Visualization"
-  ],
   "activationEvents": [
     "workspaceContains:plan/map.yaml",
     "onWebviewPanel:ideaToCode.app",
